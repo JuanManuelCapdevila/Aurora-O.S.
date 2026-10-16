@@ -24,14 +24,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Tests del motor
         run: cd engine && npm test
       - name: ShellCheck
         run: |
+          pip install --quiet shellcheck-py==0.11.0.1
+          shellcheck --version
           shellcheck install/*.sh iso/build.sh rootfs/usr/local/bin/* \
             rootfs/usr/share/aurora/tools/*.sh iso/airootfs/usr/local/bin/*
 
@@ -40,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Liberar espacio en disco
         run: |
