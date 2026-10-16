@@ -75,8 +75,8 @@ if [[ -d "$PROFILE/efiboot/loader/entries" ]]; then
   sed -i '/^options/ s/$/ cow_spacesize=4G/' "$PROFILE"/efiboot/loader/entries/01-*.conf
 fi
 
-# shellcheck source=/dev/null
-bootmodes="$(source "$RELENG/profiledef.sh" && declare -p bootmodes)"
+# shellcheck source=/dev/null disable=SC2034  # file_permissions lo usa el archivo cargado
+bootmodes="$(declare -A file_permissions; source "$RELENG/profiledef.sh" && declare -p bootmodes)"
 sed "s|@BOOTMODES@|${bootmodes#declare -a }|" "$REPO_DIR/iso/profiledef.sh.in" > "$PROFILE/profiledef.sh"
 
 cp /etc/pacman.conf "$PROFILE/pacman.conf"
