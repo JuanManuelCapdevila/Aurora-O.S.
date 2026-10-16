@@ -52,10 +52,20 @@ jobs:
 
       - name: Construir el ISO (contenedor Arch Linux)
         run: |
+          set -o pipefail
           docker run --rm --privileged -v "$PWD:/repo" -e OUT_DIR=/repo/out \
-            archlinux:latest /repo/iso/build.sh
+            archlinux:latest /repo/iso/build.sh 2>&1 | tee build.log
           sudo chown -R "$(id -u):$(id -g)" out
           cd out && sha256sum ./*.iso > SHA256SUMS && ls -lh
+
+      - name: Resumen del error de construcción
+        if: failure()
+        run: |
+          # Las últimas líneas del log como anotación: se pueden leer por la API
+          # aunque el log completo no esté accesible.
+          [ -f build.log ] || exit 0
+          tail -n 80 build.log | sed 's/\x1b\[[0-9;]*m//g' > tail.log
+          echo "::error title=build.sh::$(sed -e 's/%/%25/g' -e 's/\r//g' tail.log | awk '{printf "%s%%0A", $0}')"
 
       - name: Subir el ISO como artefacto
         uses: actions/upload-artifact@v4
@@ -88,7 +98,12 @@ jobs:
             -append "archisobasedir=arch archisolabel=$LABEL console=ttyS0 aurora.selftest systemd.unit=multi-user.target" \
             | tee qemu/serial.log || true
           grep 'AURORA-CHECK' qemu/serial.log || true
-          grep -q 'AURORA-SELFTEST: OK' qemu/serial.log
+          if ! grep -q 'AURORA-SELFTEST: OK' qemu/serial.log; then
+            report="$( (grep 'AURORA-CHECK' qemu/serial.log; echo '--- final del log ---'; tail -n 40 qemu/serial.log) \
+              | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            echo "::error title=autoprueba::$report"
+            exit 1
+          fi
 
       - name: Subir el log de QEMU
         if: always()
