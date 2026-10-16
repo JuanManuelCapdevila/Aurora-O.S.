@@ -1,6 +1,6 @@
 # Paquetes que pueden no estar en los repos oficiales. postinstall.sh primero
 # prueba con pacman y, si no existen, los compila desde el AUR.
 # Verificar los nombres en https://aur.archlinux.org si alguno falla.
-umu-launcher
+# umu-launcher se instala aparte con install/fetch-umu.sh (versión zipapp).
 emulationstation-de
 ryzenadj-git

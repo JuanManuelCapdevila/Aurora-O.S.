@@ -6,6 +6,7 @@ base-devel
 git
 sudo
 nodejs
+python
 unzip
 curl
 jq

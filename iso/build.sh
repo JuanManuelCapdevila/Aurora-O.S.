@@ -26,7 +26,7 @@ log "Preparando el entorno de construcción"
 if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
   sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
 fi
-pacman -Syu --noconfirm --needed archiso base-devel git sudo
+pacman -Syu --noconfirm --needed archiso base-devel git sudo jq
 rm -rf "$BUILD_DIR"
 mkdir -p "$PROFILE" "$LOCAL_REPO" "$OUT_DIR"
 
@@ -99,6 +99,7 @@ mkdir -p "$AIROOTFS/opt/aurora"
 cp -a "$REPO_DIR/engine" "$AIROOTFS/opt/aurora/engine"
 rm -rf "$AIROOTFS/opt/aurora/engine/test"
 ln -sf /opt/aurora/engine/bin/aurora.js "$AIROOTFS/usr/local/bin/aurora"
+"$REPO_DIR/install/fetch-umu.sh" "$AIROOTFS/usr/local/bin"
 
 # Servicios (equivale a systemctl enable dentro de la imagen).
 units="$AIROOTFS/etc/systemd/system"

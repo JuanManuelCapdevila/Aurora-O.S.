@@ -74,6 +74,9 @@ done < <(read_list "$REPO_DIR/install/aur.txt")
 rm -f "$SUDOERS_TMP"
 trap - EXIT
 
+log "Instalando umu-launcher"
+"$REPO_DIR/install/fetch-umu.sh" /usr/local/bin || FAILED+=("umu-launcher")
+
 log "Instalando el motor de compatibilidad en $ENGINE_DEST"
 mkdir -p "$ENGINE_DEST"
 cp -a "$REPO_DIR/engine/." "$ENGINE_DEST/"
