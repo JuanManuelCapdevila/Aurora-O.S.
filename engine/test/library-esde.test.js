@@ -58,6 +58,8 @@ test('export-esde crea un archivo por juego, el sistema y limpia los viejos', ()
   const xml = fs.readFileSync(r.systems.file, 'utf8');
   assert.match(xml, /<command label="Aurora">\/usr\/local\/bin\/aurora launch-rom %ROM%<\/command>/);
   assert.match(xml, /<path>\/usr\/share\/aurora\/tools<\/path>/);
+  assert.match(xml, /<fullname>Juegos<\/fullname>/);
+  assert.match(xml, /<theme>aurora<\/theme>/);
 
   // Idempotente.
   const again = exportEsde(system);
@@ -71,4 +73,33 @@ test('export-esde no pisa un es_systems.xml escrito por el usuario', () => {
   assert.equal(r.systems.written, false);
   assert.equal(fs.readFileSync(file, 'utf8'), '<systemList/>');
   assert.ok(!fs.readFileSync(file, 'utf8').includes(MARKER));
+});
+
+test('export-esde enlaza el tema, los íconos y la configuración inicial sin pisar la del usuario', () => {
+  const { root, system } = setup();
+  const assets = path.join(root, 'assets');
+  writeFile(path.join(assets, 'themes', 'aurora-material', 'theme.xml'), '<theme/>');
+  writeFile(path.join(assets, 'media', 'aurora', 'covers', 'Terminal.png'), 'png');
+  writeFile(path.join(assets, 'es_settings.xml'), '<string name="Theme" value="aurora-material" />');
+  system.esdeAssetsDir = assets;
+
+  const r = exportEsde(system);
+  assert.equal(r.assets.installed.length, 3);
+  assert.equal(
+    fs.readFileSync(path.join(system.esdeDir, 'themes', 'aurora-material', 'theme.xml'), 'utf8'),
+    '<theme/>',
+  );
+  assert.ok(fs.existsSync(path.join(system.esdeDir, 'downloaded_media', 'aurora', 'covers', 'Terminal.png')));
+
+  // Si el usuario cambió la configuración de ES-DE, no se toca.
+  const settings = path.join(system.esdeDir, 'settings', 'es_settings.xml');
+  fs.writeFileSync(settings, '<string name="Theme" value="otro" />');
+  assert.deepEqual(exportEsde(system).assets.installed, []);
+  assert.equal(fs.readFileSync(settings, 'utf8'), '<string name="Theme" value="otro" />');
+});
+
+test('export-esde funciona sin recursos del tema instalados', () => {
+  const { root, system } = setup();
+  system.esdeAssetsDir = path.join(root, 'no-existe');
+  assert.deepEqual(exportEsde(system).assets.installed, []);
 });

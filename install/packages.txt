@@ -45,6 +45,10 @@ bluez-utils
 greetd
 zram-generator
 
+# Para generar el tema de ES-DE (theme/build.mjs)
+librsvg
+ttf-roboto
+
 # Fuentes que usan muchos juegos viejos
 ttf-liberation
 noto-fonts

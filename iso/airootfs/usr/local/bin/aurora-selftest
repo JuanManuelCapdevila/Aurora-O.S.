@@ -32,6 +32,10 @@ check "aurora help" runuser -u player -- env HOME=/home/player aurora help
 check "aurora export-esde" runuser -u player -- env HOME=/home/player aurora export-esde
 check "es_systems.xml generado" test -f /home/player/ES-DE/custom_systems/es_systems.xml
 check "herramientas de ES-DE" test -f "/usr/share/aurora/tools/Instalar Aurora en un disco.sh"
+check "tema aurora-material" test -f /usr/share/aurora/es-de/themes/aurora-material/theme.xml
+check "íconos de herramientas" test -f /usr/share/aurora/es-de/media/aurora/covers/Terminal.png
+check "tema enlazado en ES-DE" test -f /home/player/ES-DE/themes/aurora-material/theme.xml
+check "configuración inicial de ES-DE" grep -q aurora-material /home/player/ES-DE/settings/es_settings.xml
 check "greetd habilitado" systemctl is-enabled greetd.service
 check "NetworkManager activo" systemctl is-active NetworkManager.service
 check "sesión de greetd" grep -q 'user = "player"' /etc/greetd/config.toml

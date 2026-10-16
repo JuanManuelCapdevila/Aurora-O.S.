@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- Configuración inicial de ES-DE en Aurora. Se copia solo si el usuario no tiene una. -->
+<string name="Theme" value="aurora-material" />
+<string name="ThemeVariant" value="android" />
+<string name="CollectionSystemsAuto" value="all,favorites,lastplayed" />
+<bool name="DisplayClock" value="true" />
+<bool name="SystemStatusWifi" value="true" />
+<bool name="SystemStatusBluetooth" value="true" />
+<bool name="SystemStatusBattery" value="true" />
+<bool name="SystemStatusBatteryPercentage" value="true" />
+<bool name="SplashScreen" value="false" />

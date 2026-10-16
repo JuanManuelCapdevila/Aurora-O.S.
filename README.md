@@ -4,7 +4,9 @@ Sistema operativo ligero tipo consola para la **Anbernic Win600**, pensado para 
 **2000–2010** (DirectX 7/8/9, OpenGL) con una interfaz manejable con el gamepad.
 
 - **Base:** Arch Linux mínimo.
-- **Interfaz:** [ES-DE](https://es-de.org) (EmulationStation Desktop Edition) a pantalla completa sobre `cage`.
+- **Interfaz:** [ES-DE](https://es-de.org) (EmulationStation Desktop Edition) a pantalla completa sobre `cage`, con
+  el tema propio **Aurora Material** (estilo Android 5–9: barra de estado, grilla de íconos, Roboto). En cada
+  build, CI publica capturas del tema en la rama [`previews`](https://github.com/JuanManuelCapdevila/Aurora-O.S./tree/previews).
 - **Compatibilidad:** Proton-GE vía `umu-launcher` (DXVK traduce D3D8–11 a Vulkan).
 - **Imagen:** cada juego corre en su propio `gamescope`, que renderiza a baja resolución (ej. 960×540) y escala a
   la pantalla de 720p con FSR.
@@ -112,6 +114,7 @@ engine/            Motor de compatibilidad (Node.js, sin dependencias)
   src/             Parser PE, detección, capas de config, armado del comando, ES-DE, energía
   profiles/        Perfiles por capas (JSON)
   test/            Tests: cd engine && npm test
+theme/             Tema de ES-DE "aurora-material" (estilo Android 5-9) e íconos (build.mjs)
 iso/               Perfil de archiso: build.sh, paquetes, archivos solo del live (usuario, autoprueba)
 install/           Listas de paquetes, postinstall.sh (instalación manual), fetch-wrappers.sh
 rootfs/            Archivos que se copian al sistema: sesión, instalador, herramientas de ES-DE, configs

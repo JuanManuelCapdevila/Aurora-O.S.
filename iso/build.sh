@@ -30,7 +30,7 @@ fi
 if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
   printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
 fi
-pacman -Syu --noconfirm --needed archiso base-devel git sudo jq
+pacman -Syu --noconfirm --needed archiso base-devel git sudo jq nodejs librsvg ttf-roboto
 rm -rf "$BUILD_DIR"
 mkdir -p "$PROFILE" "$LOCAL_REPO" "$OUT_DIR"
 
@@ -129,6 +129,7 @@ cp -a "$REPO_DIR/engine" "$AIROOTFS/opt/aurora/engine"
 rm -rf "$AIROOTFS/opt/aurora/engine/test"
 ln -sf /opt/aurora/engine/bin/aurora.js "$AIROOTFS/usr/local/bin/aurora"
 "$REPO_DIR/install/fetch-umu.sh" "$AIROOTFS/usr/local/bin"
+node "$REPO_DIR/theme/build.mjs" "$AIROOTFS/usr/share/aurora/es-de" "$REPO_DIR/rootfs/usr/share/aurora/tools"
 
 # Servicios (equivale a systemctl enable dentro de la imagen).
 units="$AIROOTFS/etc/systemd/system"

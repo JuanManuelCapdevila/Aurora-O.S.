@@ -8,8 +8,9 @@ const { listGames } = require('./library');
 // Cada juego se expone como un archivo "<Nombre>.aurora" en ~/ROMs/windows cuyo
 // contenido es el ID del juego. ES-DE lo muestra (y scrapea carátulas) por el
 // nombre del archivo y al elegirlo ejecuta `aurora launch-rom <archivo>`.
-// Un segundo sistema, "Aurora: Herramientas", muestra los scripts de toolsDir
-// (Wi-Fi, buscar juegos, instalar, energía).
+// Un segundo sistema, "Ajustes", muestra los scripts de toolsDir (Wi-Fi, buscar
+// juegos, instalar, energía). El tema aurora-material y los íconos de las
+// herramientas se enlazan desde esdeAssetsDir (los genera theme/build.mjs).
 
 const SYSTEM_NAME = 'windows';
 const ROM_EXT = '.aurora';
@@ -21,7 +22,7 @@ ${MARKER}
 <systemList>
   <system>
     <name>${SYSTEM_NAME}</name>
-    <fullname>Microsoft Windows</fullname>
+    <fullname>Juegos</fullname>
     <path>%ROMPATH%/${SYSTEM_NAME}</path>
     <extension>${ROM_EXT}</extension>
     <command label="Aurora">${auroraBin} launch-rom %ROM%</command>
@@ -30,12 +31,12 @@ ${MARKER}
   </system>
   <system>
     <name>aurora</name>
-    <fullname>Aurora: Herramientas</fullname>
+    <fullname>Ajustes</fullname>
     <path>${toolsDir}</path>
     <extension>.sh</extension>
     <command label="Aurora">/usr/bin/bash %ROM%</command>
     <platform>ignore</platform>
-    <theme>desktop</theme>
+    <theme>aurora</theme>
   </system>
 </systemList>
 `;
@@ -59,6 +60,38 @@ function writeEsSystems(system) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, esSystemsXml(system.auroraBin, system.toolsDir));
   return { file, written: true };
+}
+
+// Enlaza el tema y los íconos de las herramientas dentro de ~/ES-DE y deja la
+// configuración inicial si el usuario todavía no tiene una. Nunca pisa archivos
+// del usuario: solo crea lo que falta.
+function installEsdeAssets(system) {
+  const assets = system.esdeAssetsDir;
+  if (!assets || !fs.existsSync(assets)) return { installed: [] };
+  const installed = [];
+  const link = (target, linkPath) => {
+    if (!fs.existsSync(target)) return;
+    try {
+      fs.lstatSync(linkPath);
+      return;
+    } catch {
+      // No existe: se crea.
+    }
+    fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+    fs.symlinkSync(target, linkPath);
+    installed.push(linkPath);
+  };
+  link(path.join(assets, 'themes', 'aurora-material'), path.join(system.esdeDir, 'themes', 'aurora-material'));
+  link(path.join(assets, 'media', 'aurora'), path.join(system.esdeDir, 'downloaded_media', 'aurora'));
+
+  const settings = path.join(system.esdeDir, 'settings', 'es_settings.xml');
+  const defaults = path.join(assets, 'es_settings.xml');
+  if (fs.existsSync(defaults) && !fs.existsSync(settings)) {
+    fs.mkdirSync(path.dirname(settings), { recursive: true });
+    fs.copyFileSync(defaults, settings);
+    installed.push(settings);
+  }
+  return { installed };
 }
 
 function exportEsde(system) {
@@ -91,7 +124,7 @@ function exportEsde(system) {
     created.push(entry);
   }
 
-  return { romDir, systems: writeEsSystems(system), created, removed };
+  return { romDir, systems: writeEsSystems(system), assets: installEsdeAssets(system), created, removed };
 }
 
 function readRomFile(file) {
@@ -100,4 +133,4 @@ function readRomFile(file) {
   return id;
 }
 
-module.exports = { exportEsde, readRomFile, romFileName, esSystemsXml, MARKER };
+module.exports = { exportEsde, installEsdeAssets, readRomFile, romFileName, esSystemsXml, MARKER };

@@ -1,0 +1,122 @@
+<!--
+    Aurora Material: pantalla de inicio estilo Android 5-9.
+    - Barra de estado arriba (hora, Wi-Fi, batería).
+    - Vista de sistemas: grilla de íconos ("apps") generados por theme/build.mjs.
+    - Vista de juegos: grilla de carátulas con el nombre del elegido abajo.
+    Los íconos (icons/), el fondo (assets/wallpaper.png) y las fuentes (fonts/)
+    se generan al construir la imagen.
+-->
+<theme>
+    <variables>
+        <textColor>FFFFFFFF</textColor>
+        <textDimColor>FFFFFFB3</textDimColor>
+        <fontRegular>./fonts/Roboto-Regular.ttf</fontRegular>
+        <fontMedium>./fonts/Roboto-Medium.ttf</fontMedium>
+    </variables>
+
+    <variant name="android">
+        <view name="system, gamelist">
+            <image name="wallpaper">
+                <pos>0 0</pos>
+                <size>1 1</size>
+                <path>./assets/wallpaper.png</path>
+                <zIndex>0</zIndex>
+            </image>
+
+            <!-- Barra de estado -->
+            <image name="statusBar">
+                <pos>0 0</pos>
+                <size>1 0.05</size>
+                <path>./assets/white.svg</path>
+                <color>00000066</color>
+                <zIndex>40</zIndex>
+            </image>
+            <clock name="clock">
+                <pos>0.02 0.025</pos>
+                <size>0.2 0.04</size>
+                <origin>0 0.5</origin>
+                <fontPath>${fontMedium}</fontPath>
+                <fontSize>0.03</fontSize>
+                <color>${textColor}</color>
+                <format>%H:%M</format>
+                <horizontalAlignment>left</horizontalAlignment>
+                <zIndex>41</zIndex>
+            </clock>
+            <systemstatus name="systemStatus">
+                <pos>0.98 0.025</pos>
+                <origin>1 0.5</origin>
+                <height>0.03</height>
+                <fontPath>${fontMedium}</fontPath>
+                <color>${textColor}</color>
+                <entries>wifi, bluetooth, battery</entries>
+                <zIndex>41</zIndex>
+            </systemstatus>
+
+            <!-- Ayuda de botones, como la barra de navegación de Android -->
+            <helpsystem name="help">
+                <pos>0.5 0.965</pos>
+                <origin>0.5 0.5</origin>
+                <textColor>${textDimColor}</textColor>
+                <iconColor>${textDimColor}</iconColor>
+                <fontPath>${fontRegular}</fontPath>
+                <fontSize>0.024</fontSize>
+            </helpsystem>
+        </view>
+
+        <view name="system">
+            <grid name="systemGrid">
+                <pos>0.08 0.12</pos>
+                <size>0.84 0.76</size>
+                <staticImage>./icons/system/${system.theme}.png</staticImage>
+                <defaultImage>./icons/system/default.png</defaultImage>
+                <itemSize>0.15 0.27</itemSize>
+                <itemScale>1.1</itemScale>
+                <itemSpacing>0.04 0.04</itemSpacing>
+                <imageFit>contain</imageFit>
+                <unfocusedItemOpacity>0.85</unfocusedItemOpacity>
+                <textColor>${textColor}</textColor>
+                <fontPath>${fontMedium}</fontPath>
+                <fontSize>0.03</fontSize>
+                <zIndex>30</zIndex>
+            </grid>
+        </view>
+
+        <view name="gamelist">
+            <text name="systemName">
+                <pos>0.08 0.085</pos>
+                <size>0.84 0.06</size>
+                <origin>0 0.5</origin>
+                <systemdata>fullName</systemdata>
+                <fontPath>${fontMedium}</fontPath>
+                <fontSize>0.045</fontSize>
+                <color>${textColor}</color>
+                <zIndex>30</zIndex>
+            </text>
+            <grid name="gameGrid">
+                <pos>0.08 0.14</pos>
+                <size>0.84 0.68</size>
+                <imageType>cover</imageType>
+                <itemSize>0.15 0.27</itemSize>
+                <itemScale>1.1</itemScale>
+                <itemSpacing>0.04 0.04</itemSpacing>
+                <imageFit>contain</imageFit>
+                <unfocusedItemOpacity>0.85</unfocusedItemOpacity>
+                <textColor>${textColor}</textColor>
+                <fontPath>${fontMedium}</fontPath>
+                <fontSize>0.028</fontSize>
+                <zIndex>30</zIndex>
+            </grid>
+            <text name="gameName">
+                <pos>0.5 0.875</pos>
+                <size>0.84 0.05</size>
+                <origin>0.5 0.5</origin>
+                <metadata>name</metadata>
+                <horizontalAlignment>center</horizontalAlignment>
+                <fontPath>${fontMedium}</fontPath>
+                <fontSize>0.035</fontSize>
+                <color>${textColor}</color>
+                <zIndex>30</zIndex>
+            </text>
+        </view>
+    </variant>
+</theme>

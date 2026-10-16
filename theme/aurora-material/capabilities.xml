@@ -1,0 +1,8 @@
+<!-- Tema de ES-DE para Aurora O.S. con estética Material clásica (Android 5-9). -->
+<themeCapabilities>
+    <themeName>Aurora Material</themeName>
+    <variant name="android">
+        <label>Android</label>
+        <selectable>true</selectable>
+    </variant>
+</themeCapabilities>

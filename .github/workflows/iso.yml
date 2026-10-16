@@ -10,6 +10,7 @@ on:
       - 'install/**'
       - 'iso/**'
       - 'rootfs/**'
+      - 'theme/**'
       - '.github/workflows/iso.yml'
   workflow_dispatch:
 
@@ -34,7 +35,7 @@ jobs:
         run: |
           pip install --quiet shellcheck-py==0.11.0.1
           shellcheck --version
-          shellcheck install/*.sh iso/build.sh rootfs/usr/local/bin/* \
+          shellcheck install/*.sh iso/build.sh iso/preview.sh rootfs/usr/local/bin/* \
             rootfs/usr/share/aurora/tools/*.sh iso/airootfs/usr/local/bin/*
 
   iso:
@@ -54,7 +55,8 @@ jobs:
         run: |
           set -o pipefail
           docker run --rm --privileged -v "$PWD:/repo" -e OUT_DIR=/repo/out \
-            archlinux:latest /repo/iso/build.sh 2>&1 | tee build.log
+            archlinux:latest bash -c '/repo/iso/build.sh && { /repo/iso/preview.sh || echo "Las capturas fallaron (no bloquea el ISO)"; }' \
+            2>&1 | tee build.log
           sudo chown -R "$(id -u):$(id -g)" out
           cd out && sha256sum ./*.iso > SHA256SUMS && ls -lh
 
@@ -71,6 +73,20 @@ jobs:
           for f in chunk.*; do
             echo "::error title=build.sh $f::$(sed 's/%/%25/g' "$f" | awk '{printf "%s%%0A", $0}')"
           done
+
+      - name: Publicar capturas del tema (rama previews)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -d out/preview ] || exit 0
+          sudo chown -R "$(id -u):$(id -g)" out
+          cd out/preview
+          git init -q -b previews
+          git add -A
+          git -c user.name="github-actions" -c user.email="actions@github.com" \
+            commit -qm "Capturas de ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" previews
 
       - name: Subir el ISO como artefacto
         uses: actions/upload-artifact@v4

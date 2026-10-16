@@ -88,6 +88,9 @@ rm -rf "$ENGINE_DEST/test"
 chmod +x "$ENGINE_DEST/bin/aurora.js"
 ln -sf "$ENGINE_DEST/bin/aurora.js" /usr/local/bin/aurora
 
+log "Generando el tema de ES-DE"
+node "$REPO_DIR/theme/build.mjs" /usr/share/aurora/es-de "$REPO_DIR/rootfs/usr/share/aurora/tools"
+
 log "Copiando archivos de sistema"
 cp -a "$REPO_DIR/rootfs/." /
 sed -i "s/@AURORA_USER@/$AURORA_USER/" /etc/greetd/config.toml
