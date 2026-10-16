@@ -1,0 +1,5 @@
+# Generadas al construir la imagen (iso/build.sh). ES-DE necesita es_ES.UTF-8
+# para mostrar sus menús en español.
+en_US.UTF-8 UTF-8
+es_ES.UTF-8 UTF-8
+es_AR.UTF-8 UTF-8

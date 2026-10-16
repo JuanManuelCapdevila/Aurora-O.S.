@@ -129,6 +129,11 @@ cp -a "$REPO_DIR/engine" "$AIROOTFS/opt/aurora/engine"
 rm -rf "$AIROOTFS/opt/aurora/engine/test"
 ln -sf /opt/aurora/engine/bin/aurora.js "$AIROOTFS/usr/local/bin/aurora"
 "$REPO_DIR/install/fetch-umu.sh" "$AIROOTFS/usr/local/bin"
+# Configuraciones regionales: se generan en el contenedor (misma glibc que la
+# imagen) y se copia el archivo resultante.
+cp "$REPO_DIR/iso/airootfs/etc/locale.gen" /etc/locale.gen
+locale-gen
+install -Dm644 /usr/lib/locale/locale-archive "$AIROOTFS/usr/lib/locale/locale-archive"
 node "$REPO_DIR/theme/build.mjs" "$AIROOTFS/usr/share/aurora/es-de" "$REPO_DIR/rootfs/usr/share/aurora/tools"
 
 # Servicios (equivale a systemctl enable dentro de la imagen).

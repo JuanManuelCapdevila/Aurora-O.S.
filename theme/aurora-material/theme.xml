@@ -84,7 +84,7 @@
                 <pos>0.08 0.085</pos>
                 <size>0.84 0.06</size>
                 <origin>0 0.5</origin>
-                <systemdata>fullName</systemdata>
+                <text>${system.fullName}</text>
                 <fontPath>${fontMedium}</fontPath>
                 <fontSize>0.045</fontSize>
                 <color>${textColor}</color>
@@ -95,6 +95,10 @@
                 <size>0.84 0.68</size>
                 <imageType>cover</imageType>
                 <itemSize>0.15 0.27</itemSize>
+                <!-- Juegos sin carátula: tarjeta redondeada con el nombre. -->
+                <textBackgroundColor>37474FE6</textBackgroundColor>
+                <textSelectedBackgroundColor>3F51B5FF</textSelectedBackgroundColor>
+                <textBackgroundCornerRadius>0.08</textBackgroundCornerRadius>
                 <itemScale>1.1</itemScale>
                 <itemSpacing>0.04 0.04</itemSpacing>
                 <imageFit>contain</imageFit>

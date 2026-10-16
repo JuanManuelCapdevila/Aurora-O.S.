@@ -18,6 +18,7 @@ log() { printf '\n\033[1;35m==> %s\033[0m\n' "$*"; }
 
 log "Preparando las capturas del tema"
 pacman -S --noconfirm --needed xorg-server-xvfb xdotool imagemagick mesa >/dev/null
+cp "$REPO_DIR/iso/airootfs/etc/locale.gen" /etc/locale.gen && locale-gen >/dev/null
 rm -rf "$PREVIEW_HOME" "$OUT"
 mkdir -p "$PREVIEW_HOME" "$OUT"
 
@@ -41,6 +42,8 @@ for game in "GTA San Andreas" "GTA Vice City" "Need for Speed Carbon" "Pro Evolu
   node "$REPO_DIR/engine/bin/aurora.js" add "$PREVIEW_HOME/install/$game" >/dev/null
 done
 node "$REPO_DIR/engine/bin/aurora.js" export-esde
+# En CI no hay batería ni Wi-Fi: se fuerzan los indicadores para verlos en las capturas.
+echo '<bool name="SystemStatusDisplayAll" value="true" />' >> "$PREVIEW_HOME/ES-DE/settings/es_settings.xml"
 
 Xvfb :99 -screen 0 1280x720x24 -nolisten tcp &
 xvfb_pid=$!

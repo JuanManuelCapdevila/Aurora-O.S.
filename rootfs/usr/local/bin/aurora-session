@@ -6,6 +6,10 @@
 export XDG_CURRENT_DESKTOP=aurora
 export XDG_SESSION_TYPE=wayland
 # greetd no carga /etc/locale.conf: sin esto las apps avisan "invalid locale".
+if [ -z "${LANG:-}" ] && [ -r /etc/locale.conf ]; then
+  # shellcheck source=/dev/null
+  . /etc/locale.conf
+fi
 export LANG="${LANG:-C.UTF-8}"
 
 LOG_DIR="$HOME/.local/state/aurora"

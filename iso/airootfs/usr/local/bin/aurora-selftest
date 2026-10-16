@@ -35,6 +35,7 @@ check "herramientas de ES-DE" test -f "/usr/share/aurora/tools/Instalar Aurora e
 check "tema aurora-material" test -f /usr/share/aurora/es-de/themes/aurora-material/theme.xml
 check "íconos de herramientas" test -f /usr/share/aurora/es-de/media/aurora/covers/Terminal.png
 check "tema enlazado en ES-DE" test -f /home/player/ES-DE/themes/aurora-material/theme.xml
+check "configuración regional es_ES (menús de ES-DE)" sh -c "locale -a | grep -qi '^es_ES.utf8'"
 check "configuración inicial de ES-DE" grep -q aurora-material /home/player/ES-DE/settings/es_settings.xml
 check "greetd habilitado" systemctl is-enabled greetd.service
 check "NetworkManager activo" systemctl is-active NetworkManager.service
