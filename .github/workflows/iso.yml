@@ -64,8 +64,13 @@ jobs:
           # Las últimas líneas del log como anotación: se pueden leer por la API
           # aunque el log completo no esté accesible.
           [ -f build.log ] || exit 0
-          tail -n 80 build.log | sed 's/\x1b\[[0-9;]*m//g' > tail.log
-          echo "::error title=build.sh::$(sed -e 's/%/%25/g' -e 's/\r//g' tail.log | awk '{printf "%s%%0A", $0}')"
+          # GitHub trunca cada anotación (~4 KB): se parte en bloques de 30 líneas
+          # cortas, hasta 8 bloques (el máximo es 10 por paso).
+          tail -n 240 build.log | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' | cut -c1-160 > tail.log
+          split -l 30 tail.log chunk.
+          for f in chunk.*; do
+            echo "::error title=build.sh $f::$(sed 's/%/%25/g' "$f" | awk '{printf "%s%%0A", $0}')"
+          done
 
       - name: Subir el ISO como artefacto
         uses: actions/upload-artifact@v4
