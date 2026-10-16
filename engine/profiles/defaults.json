@@ -1,0 +1,26 @@
+{
+  "description": "Valores base para cualquier juego. Las capas siguientes los sobrescriben.",
+  "display": {
+    "outputWidth": 1280,
+    "outputHeight": 720,
+    "renderWidth": 960,
+    "renderHeight": 540,
+    "filter": "fsr",
+    "scaler": "fit",
+    "fpsLimit": 60
+  },
+  "compat": {
+    "runner": "umu",
+    "proton": "GE-Proton",
+    "useWined3d": false,
+    "wrappers": [],
+    "dllOverrides": {}
+  },
+  "env": {
+    "PULSE_LATENCY_MSEC": "60"
+  },
+  "gamemode": true,
+  "controls": {
+    "profile": "generic"
+  }
+}

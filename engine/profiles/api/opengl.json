@@ -1,0 +1,6 @@
+{
+  "description": "OpenGL (motores id Tech, varios ports). Corre directo sobre Mesa; el límite de FPS de MangoHud no aplica en OpenGL dentro de Proton.",
+  "display": {
+    "fpsLimit": 60
+  }
+}

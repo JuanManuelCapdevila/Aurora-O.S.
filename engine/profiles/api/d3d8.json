@@ -1,0 +1,6 @@
+{
+  "description": "Direct3D 8 (aprox. 2001-2004). Proton lo traduce a Vulkan con DXVK.",
+  "display": {
+    "fpsLimit": 60
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Direct3D 11 (2009+). Al límite del hardware: render y FPS bajos por defecto. Si el juego permite elegir DX9, conviene forzarlo con args.",
+  "display": {
+    "renderWidth": 854,
+    "renderHeight": 480,
+    "fpsLimit": 30
+  }
+}

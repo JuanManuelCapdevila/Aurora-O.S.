@@ -1,0 +1,6 @@
+{
+  "description": "Direct3D 9 (aprox. 2003-2010). El grueso de la época; Proton lo traduce a Vulkan con DXVK.",
+  "display": {
+    "fpsLimit": 60
+  }
+}

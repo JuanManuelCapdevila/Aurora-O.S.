@@ -1,0 +1,8 @@
+{
+  "description": "DirectDraw / Direct3D 1-7 (aprox. 1997-2003). Suelen ser 4:3 y frágiles con resoluciones altas. Wine los traduce con WineD3D; si fallan, probar el wrapper cnc-ddraw (2D) o dgvoodoo2 (3D) en los overrides del juego.",
+  "display": {
+    "renderWidth": 800,
+    "renderHeight": 600,
+    "fpsLimit": 60
+  }
+}

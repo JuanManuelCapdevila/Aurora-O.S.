@@ -1,0 +1,1 @@
+{ "description": "Estrategia en tiempo real: requiere el modo mouse de la Win600.", "controls": { "profile": "rts" }, "display": { "fpsLimit": 30 } }

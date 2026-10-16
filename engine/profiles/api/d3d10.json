@@ -1,0 +1,8 @@
+{
+  "description": "Direct3D 10 (aprox. 2007-2010). Pesado para la Vega 3: render y FPS más bajos por defecto.",
+  "display": {
+    "renderWidth": 854,
+    "renderHeight": 480,
+    "fpsLimit": 30
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "aurora-engine",
+  "version": "0.1.0",
+  "description": "Motor de compatibilidad de Aurora O.S.: detecta la tecnología de cada juego de Windows y arma su configuración de Proton/gamescope.",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "aurora": "bin/aurora.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
+}

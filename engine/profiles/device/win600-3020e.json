@@ -1,0 +1,17 @@
+{
+  "description": "Anbernic Win600 con Athlon Silver 3020e (2 núcleos / 2 hilos). Render más bajo por defecto.",
+  "display": {
+    "outputWidth": 1280,
+    "outputHeight": 720,
+    "renderWidth": 854,
+    "renderHeight": 480
+  },
+  "power": {
+    "default": "balanced",
+    "modes": {
+      "battery": { "stapmLimit": 6000, "fastLimit": 8000, "slowLimit": 6000 },
+      "balanced": { "stapmLimit": 10000, "fastLimit": 12000, "slowLimit": 10000 },
+      "performance": { "stapmLimit": 15000, "fastLimit": 18000, "slowLimit": 15000 }
+    }
+  }
+}
