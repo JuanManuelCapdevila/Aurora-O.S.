@@ -1,0 +1,5 @@
+Aurora O.S. \r (\l)
+
+Si ES-DE no arrancó: ingresá como root (sin contraseña) y ejecutá aurora-logs.
+Para volver a intentar la sesión: systemctl restart greetd
+

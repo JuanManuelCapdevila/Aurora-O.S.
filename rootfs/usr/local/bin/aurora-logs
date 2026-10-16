@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Junta en un archivo lo necesario para diagnosticar la sesión de Aurora
+# (si ES-DE no arranca, si un juego se cierra, etc.) y lo muestra.
+#
+# Uso: aurora-logs [archivo]   (por defecto ~/aurora-logs.txt; mejor como root)
+
+OUT="${1:-$HOME/aurora-logs.txt}"
+
+section() { printf '\n===== %s =====\n' "$1"; }
+
+{
+  section "Versión"
+  uname -r
+  cat /etc/aurora/aurora.json 2>/dev/null
+
+  section "Sesión (aurora-session)"
+  tail -n 120 /home/*/.local/state/aurora/session.log 2>/dev/null || echo "(sin log de sesión)"
+
+  section "greetd"
+  journalctl -b -u greetd --no-pager 2>/dev/null | tail -n 60
+
+  section "Errores del arranque"
+  journalctl -b -p err --no-pager 2>/dev/null | tail -n 60
+
+  section "GPU"
+  lspci -k 2>/dev/null | grep -A3 -Ei 'vga|3d|display'
+  ls -l /dev/dri 2>/dev/null
+} > "$OUT" 2>&1
+
+echo "Guardado en $OUT"
+less "$OUT"

@@ -1,15 +1,34 @@
 #!/bin/sh
 # Sesión de consola de Aurora: ES-DE a pantalla completa sobre cage (compositor
 # Wayland de una sola ventana). Cada juego abre su propio gamescope anidado.
+# Todo lo que imprime queda en ~/.local/state/aurora/session.log (ver aurora-logs).
 
 export XDG_CURRENT_DESKTOP=aurora
 export XDG_SESSION_TYPE=wayland
 
+LOG_DIR="$HOME/.local/state/aurora"
+mkdir -p "$LOG_DIR"
+exec >>"$LOG_DIR/session.log" 2>&1
+echo "=== $(date '+%F %T') inicio de sesión"
+
 # TDP inicial; si ryzenadj no está disponible la sesión arranca igual.
-aurora power "${AURORA_POWER_MODE:-balanced}" >/dev/null 2>&1 || true
+aurora power "${AURORA_POWER_MODE:-balanced}" || true
 
 # Mantiene la lista de juegos de ES-DE al día con la biblioteca.
-aurora export-esde >/dev/null 2>&1 || true
+aurora export-esde || true
 
 # -s permite cambiar de terminal virtual (Ctrl+Alt+F2) para mantenimiento.
-exec cage -s -- es-de
+start=$(date +%s)
+cage -s -- es-de
+status=$?
+
+# Si falló enseguida (ej. una máquina virtual sin aceleración 3D), se reintenta
+# con el renderizado por software de wlroots.
+if [ "$status" -ne 0 ] && [ $(($(date +%s) - start)) -lt 15 ]; then
+  echo "=== cage/ES-DE terminó con $status: reintento con WLR_RENDERER=pixman"
+  WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 cage -s -- es-de
+  status=$?
+fi
+
+echo "=== $(date '+%F %T') fin de sesión ($status)"
+exit "$status"
