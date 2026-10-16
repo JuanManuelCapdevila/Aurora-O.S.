@@ -26,6 +26,10 @@ log "Preparando el entorno de construcción"
 if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
   sed -i '/^#\[multilib\]/{s/^#//;n;s/^#//}' /etc/pacman.conf
 fi
+# Algunas imágenes (ej. el contenedor de Docker) no traen la sección comentada.
+if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
+  printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+fi
 pacman -Syu --noconfirm --needed archiso base-devel git sudo jq
 rm -rf "$BUILD_DIR"
 mkdir -p "$PROFILE" "$LOCAL_REPO" "$OUT_DIR"
