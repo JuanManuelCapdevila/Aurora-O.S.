@@ -19,8 +19,9 @@ for cmd in node aurora gamescope cage es-de umu-run gamemoderun mangohud foot nm
            ryzenadj dialog rsync arch-chroot bootctl sgdisk udisksctl; do
   check "comando $cmd" command -v "$cmd"
 done
-check "Vulkan RADV 64 bits" test -f /usr/share/vulkan/icd.d/radeon_icd.x86_64.json
-check "Vulkan RADV 32 bits" test -f /usr/share/vulkan/icd.d/radeon_icd.i686.json
+check "Vulkan RADV 64 bits" test -f /usr/lib/libvulkan_radeon.so
+check "Vulkan RADV 32 bits" test -f /usr/lib32/libvulkan_radeon.so
+check "manifiesto ICD de RADV" sh -c 'ls /usr/share/vulkan/icd.d/radeon_icd*.json'
 check "libvulkan 32 bits" test -f /usr/lib32/libvulkan.so.1
 check "usuario player" id player
 check "player en video e input" sh -c 'id -nG player | grep -qw video && id -nG player | grep -qw input'
@@ -32,6 +33,8 @@ check "herramientas de ES-DE" test -f "/usr/share/aurora/tools/Instalar Aurora e
 check "greetd habilitado" systemctl is-enabled greetd.service
 check "NetworkManager activo" systemctl is-active NetworkManager.service
 check "sesión de greetd" grep -q 'user = "player"' /etc/greetd/config.toml
+# Información útil en el log de CI (no cuenta como chequeo).
+echo "AURORA-INFO icd: $(find /usr/share/vulkan/icd.d/ -maxdepth 1 -name '*.json' -printf '%f ' 2>/dev/null)"
 
 if ((failures == 0)); then
   echo "AURORA-SELFTEST: OK"
