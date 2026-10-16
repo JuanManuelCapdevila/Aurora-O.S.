@@ -1,0 +1,15 @@
+#!/bin/sh
+# Sesión de consola de Aurora: ES-DE a pantalla completa sobre cage (compositor
+# Wayland de una sola ventana). Cada juego abre su propio gamescope anidado.
+
+export XDG_CURRENT_DESKTOP=aurora
+export XDG_SESSION_TYPE=wayland
+
+# TDP inicial; si ryzenadj no está disponible la sesión arranca igual.
+aurora power "${AURORA_POWER_MODE:-balanced}" >/dev/null 2>&1 || true
+
+# Mantiene la lista de juegos de ES-DE al día con la biblioteca.
+aurora export-esde >/dev/null 2>&1 || true
+
+# -s permite cambiar de terminal virtual (Ctrl+Alt+F2) para mantenimiento.
+exec cage -s -- es-de

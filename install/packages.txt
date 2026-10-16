@@ -1,0 +1,49 @@
+# Paquetes de los repos oficiales (core, extra, multilib).
+# Los juegos de 2000-2010 son casi todos de 32 bits: los lib32-* son obligatorios.
+
+# Base y herramientas
+base-devel
+git
+sudo
+nodejs
+unzip
+curl
+jq
+
+# Gráficos (AMD Vega 3: Mesa + RADV)
+mesa
+lib32-mesa
+vulkan-radeon
+lib32-vulkan-radeon
+vulkan-icd-loader
+lib32-vulkan-icd-loader
+vulkan-tools
+
+# Sesión y juegos
+cage
+gamescope
+xorg-xwayland
+gamemode
+lib32-gamemode
+mangohud
+lib32-mangohud
+
+# Audio
+pipewire
+pipewire-pulse
+pipewire-alsa
+lib32-pipewire
+wireplumber
+
+# Red y Bluetooth
+networkmanager
+bluez
+bluez-utils
+
+# Arranque y memoria
+greetd
+zram-generator
+
+# Fuentes que usan muchos juegos viejos
+ttf-liberation
+noto-fonts

@@ -4,20 +4,21 @@
 const { spawn } = require('node:child_process');
 const { loadSystemConfig, resolveConfig } = require('../src/config');
 const { detectGame } = require('../src/detect');
+const { exportEsde, readRomFile } = require('../src/esde');
 const { addGame, getGame, listGames } = require('../src/library');
 const { buildPlan, applyWrappers } = require('../src/launch');
 const { setPowerMode } = require('../src/power');
-const { serve } = require('../src/server');
 
 const USAGE = `Uso: aurora <comando> [opciones]
 
   detect <archivo.exe>                 Analiza un ejecutable (API gráfica, arquitectura, input)
   add <carpeta|exe> [--id ID] [--name NOMBRE] [--genre GENERO] [--store gog|steam] [--force]
-                                       Registra un juego instalado
+                                       Registra un juego instalado y actualiza ES-DE
   list                                 Lista los juegos registrados
   plan <id>                            Muestra la configuración resuelta y el comando, sin ejecutar
   launch <id>                          Ejecuta el juego
-  serve [--port N] [--once]            Servidor del launcher
+  launch-rom <archivo.aurora>          Ejecuta el juego de un archivo de ES-DE
+  export-esde                          Regenera los archivos de juegos y el sistema de ES-DE
   power <battery|balanced|performance> Ajusta el TDP con ryzenadj
 `;
 
@@ -53,6 +54,12 @@ function launch(system, id) {
   child.on('exit', (code, signal) => process.exit(signal ? 1 : code ?? 0));
 }
 
+function reportExport(result) {
+  const { romDir, systems, created, removed } = result;
+  console.log(`ES-DE: ${romDir} (+${created.length} / -${removed.length})`);
+  if (!systems.written) console.log(`  Aviso: ${systems.file}: ${systems.reason}`);
+}
+
 function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positional, flags } = parseArgs(rest);
@@ -72,7 +79,7 @@ function main() {
         console.log('  Otros candidatos (editar "exe" en game.json si el elegido no es el correcto):');
         for (const c of candidates.slice(1)) console.log(`    ${c.score}\t${c.exe}`);
       }
-      return;
+      return reportExport(exportEsde(system));
     }
     case 'list':
       for (const g of listGames(system.gamesDir)) {
@@ -86,12 +93,11 @@ function main() {
     }
     case 'launch':
       return launch(system, positional[0] || '');
-    case 'serve': {
-      const port = Number(flags.port || 7777);
-      serve(system, { port, once: Boolean(flags.once) });
-      console.error(`[aurora] launcher en http://127.0.0.1:${port}`);
-      return;
-    }
+    case 'launch-rom':
+      if (!positional[0]) throw new Error('Falta el archivo .aurora');
+      return launch(system, readRomFile(positional[0]));
+    case 'export-esde':
+      return reportExport(exportEsde(system));
     case 'power':
       return print(setPowerMode(system, positional[0] || ''));
     default:

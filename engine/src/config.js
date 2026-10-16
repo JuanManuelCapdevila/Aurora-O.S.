@@ -5,9 +5,14 @@ const path = require('node:path');
 
 const PROFILES_DIR = path.join(__dirname, '..', 'profiles');
 
+const HOME = process.env.HOME || '/home/player';
+
 const DEFAULT_SYSTEM = {
-  gamesDir: path.join(process.env.HOME || '/home/player', 'Games'),
+  gamesDir: path.join(HOME, 'Games'),
+  esdeDir: path.join(HOME, 'ES-DE'),
+  romsDir: path.join(HOME, 'ROMs'),
   wrappersDir: '/usr/share/aurora/wrappers',
+  auroraBin: '/usr/local/bin/aurora',
   device: 'win600-3050e',
 };
 
@@ -39,10 +44,7 @@ function deepMerge(base, layer) {
 
 function loadSystemConfig() {
   const file = process.env.AURORA_CONFIG || '/etc/aurora/aurora.json';
-  const cfg = { ...DEFAULT_SYSTEM, ...(readJSON(file) || {}) };
-  cfg.runtimeDir =
-    cfg.runtimeDir || path.join(process.env.XDG_RUNTIME_DIR || `/tmp/aurora-${process.getuid?.() ?? 0}`, 'aurora');
-  return cfg;
+  return { ...DEFAULT_SYSTEM, ...(readJSON(file) || {}) };
 }
 
 function loadProfile(kind, name, profilesDir = PROFILES_DIR) {

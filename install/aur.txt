@@ -1,0 +1,6 @@
+# Paquetes que pueden no estar en los repos oficiales. postinstall.sh primero
+# prueba con pacman y, si no existen, los compila desde el AUR.
+# Verificar los nombres en https://aur.archlinux.org si alguno falla.
+umu-launcher
+emulationstation-de
+ryzenadj-git

@@ -1,0 +1,12 @@
+# Arranca directo en la sesión de consola con el usuario de juego.
+# Si se sale de ES-DE, queda un login de texto para mantenimiento.
+[terminal]
+vt = 1
+
+[initial_session]
+command = "/usr/local/bin/aurora-session"
+user = "@AURORA_USER@"
+
+[default_session]
+command = "agreety --cmd /usr/local/bin/aurora-session"
+user = "greeter"
