@@ -31,6 +31,8 @@ jobs:
           node-version: 22
       - name: Tests del motor
         run: cd engine && npm test
+      - name: Validar el tema de ES-DE
+        run: node theme/validate.mjs
       - name: ShellCheck
         run: |
           pip install --quiet shellcheck-py==0.11.0.1

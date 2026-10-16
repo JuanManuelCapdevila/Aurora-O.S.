@@ -40,7 +40,6 @@
                 <color>${textColor}</color>
                 <format>%H:%M</format>
                 <horizontalAlignment>left</horizontalAlignment>
-                <zIndex>41</zIndex>
             </clock>
             <systemstatus name="systemStatus">
                 <pos>0.98 0.025</pos>
@@ -49,7 +48,6 @@
                 <fontPath>${fontMedium}</fontPath>
                 <color>${textColor}</color>
                 <entries>wifi, bluetooth, battery</entries>
-                <zIndex>41</zIndex>
             </systemstatus>
 
             <!-- Ayuda de botones, como la barra de navegación de Android -->
