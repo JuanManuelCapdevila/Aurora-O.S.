@@ -30,6 +30,11 @@ aceptando resolución baja (la pantalla es de 5,94" a 720p).
 - **Secure Boot:** el ISO no está firmado; hay que desactivarlo en el BIOS de la Win600.
 - **Arranque desde microSD:** confirmar que el BIOS de la Win600 permite elegir la microSD como disco de arranque.
 
+## Seguridad (pendiente antes de una versión estable)
+
+- `root` entra sin contraseña desde la consola y `player` tiene sudo sin contraseña: facilita el diagnóstico
+  en esta etapa. Antes de una versión estable, pedir una contraseña en el primer arranque.
+
 ## Límites conocidos del hardware
 
 - Juegos de 2009–2010 que exigen 4 núcleos o DirectX 10/11 pesado (GTA IV, Crysis) no van a correr bien.

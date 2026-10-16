@@ -24,6 +24,8 @@ check "Vulkan RADV 32 bits" test -f /usr/lib32/libvulkan_radeon.so
 check "manifiesto ICD de RADV" sh -c 'ls /usr/share/vulkan/icd.d/radeon_icd*.json'
 check "libvulkan 32 bits" test -f /usr/lib32/libvulkan.so.1
 check "usuario player" id player
+root_sin_clave() { [[ -z "$(getent shadow root | cut -d: -f2)" ]]; }
+check "root entra sin contraseña (consola de diagnóstico)" root_sin_clave
 check "player en video e input" sh -c 'id -nG player | grep -qw video && id -nG player | grep -qw input'
 check "home de player" test "$(stat -c %U /home/player 2>/dev/null)" = player
 check "aurora help" runuser -u player -- env HOME=/home/player aurora help
