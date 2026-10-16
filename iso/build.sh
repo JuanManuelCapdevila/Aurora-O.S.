@@ -79,6 +79,27 @@ if [[ -d "$PROFILE/efiboot/loader/entries" ]]; then
   sed -i '/^options/ s/$/ cow_spacesize=4G/' "$PROFILE"/efiboot/loader/entries/01-*.conf
 fi
 
+if [[ -d "$PROFILE/syslinux" ]]; then
+  # Menú BIOS: solo arrancar Aurora, reiniciar y apagar (sin "Boot existing OS",
+  # que en una VM o disco vacío deja la máquina colgada).
+  awk 'BEGIN { RS=""; ORS="\n\n" } !/LABEL [^\n]*speech/' "$PROFILE/syslinux/archiso_sys-linux.cfg" \
+    > "$PROFILE/syslinux/archiso_sys-linux.cfg.new"
+  mv "$PROFILE/syslinux/archiso_sys-linux.cfg.new" "$PROFILE/syslinux/archiso_sys-linux.cfg"
+  sed -i '/^APPEND/ s/$/ cow_spacesize=4G/' "$PROFILE/syslinux/archiso_sys-linux.cfg"
+  cat > "$PROFILE/syslinux/archiso_tail.cfg" <<'CFG'
+LABEL reboot
+MENU LABEL Reiniciar
+COM32 reboot.c32
+
+LABEL poweroff
+MENU LABEL Apagar
+COM32 poweroff.c32
+CFG
+fi
+# Textos de los menús: Aurora en lugar de Arch Linux.
+find "$PROFILE" \( -name '*.cfg' -o -name '*.conf' \) -exec \
+  sed -i -e 's/Arch Linux install medium/Aurora O.S. (live)/g' -e 's/Arch Linux/Aurora O.S./g' {} +
+
 # shellcheck source=/dev/null disable=SC2034  # file_permissions lo usa el archivo cargado
 bootmodes="$(declare -A file_permissions; source "$RELENG/profiledef.sh" && declare -p bootmodes)"
 sed "s|@BOOTMODES@|${bootmodes#declare -a }|" "$REPO_DIR/iso/profiledef.sh.in" > "$PROFILE/profiledef.sh"
