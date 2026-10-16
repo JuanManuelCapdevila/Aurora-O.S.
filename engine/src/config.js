@@ -12,6 +12,7 @@ const DEFAULT_SYSTEM = {
   esdeDir: path.join(HOME, 'ES-DE'),
   romsDir: path.join(HOME, 'ROMs'),
   wrappersDir: '/usr/share/aurora/wrappers',
+  toolsDir: '/usr/share/aurora/tools',
   auroraBin: '/usr/local/bin/aurora',
   device: 'win600-3050e',
 };

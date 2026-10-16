@@ -7,14 +7,14 @@ aceptando resolución baja (la pantalla es de 5,94" a 720p).
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| 0 | Reconocimiento del hardware (`tools/hw-report.sh` → `docs/hardware.md`) | Pendiente (en la consola) |
+| 0 | Reconocimiento del hardware (herramienta *Reporte de hardware* del live → `docs/hardware.md`) | Pendiente (en la consola) |
 | 1 | Instalación reproducible: Arch + multilib + Mesa 32/64 bits + umu + Proton-GE | Escrita, sin probar en la consola |
 | 2 | Sesión de consola: greetd → cage → ES-DE | Escrita, sin probar en la consola |
 | 3 | Motor de compatibilidad: detección PE, perfiles por capas, `aurora launch`, wrappers, ES-DE | Escrita, con tests |
 | 4 | Controles: perfiles por género (mapeo gamepad → teclado/mouse para juegos sin XInput) | Pendiente |
 | 5 | Instaladores: GOG offline, imágenes ISO/CD, microSD como biblioteca | Pendiente |
 | 6 | Batería de pruebas: ~30 juegos representativos por API y año; medir la tasa de compatibilidad | Pendiente |
-| 7 | Imagen distribuible (archiso), snapshots btrfs | Pendiente |
+| 7 | Imagen ISO live + instalador (archiso), construida y autoprobada en CI | Primera versión; falta snapshots btrfs |
 
 ## Puntos a validar en la consola (fases 0–2)
 
@@ -27,7 +27,8 @@ aceptando resolución baja (la pantalla es de 5,94" a 720p).
   WineD3D puede no aplicar; validar con juegos que se rompen a más de 60 FPS.
 - **ryzenadj en la 3050e:** confirmar que los límites de `device/win600-3050e.json` se aplican
   (`sudo ryzenadj --info`) y ajustar los valores según temperatura y batería.
-- **Nombres de paquetes del AUR** (`install/aur.txt`).
+- **Secure Boot:** el ISO no está firmado; hay que desactivarlo en el BIOS de la Win600.
+- **Arranque desde microSD:** confirmar que el BIOS de la Win600 permite elegir la microSD como disco de arranque.
 
 ## Límites conocidos del hardware
 

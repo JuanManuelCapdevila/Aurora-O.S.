@@ -67,6 +67,9 @@ function addGame(gamesDir, target, opts = {}) {
   const name = opts.name || path.basename(fs.statSync(abs).isDirectory() ? abs : path.dirname(abs));
   const id = opts.id || slugify(name);
   if (!ID_RE.test(id)) throw new Error(`No se pudo generar un ID válido para "${name}"; usar --id`);
+  if (fs.existsSync(gameFile(gamesDir, id)) && opts['if-new']) {
+    return { game: getGame(gamesDir, id), skipped: true, candidates: [] };
+  }
   if (fs.existsSync(gameFile(gamesDir, id)) && !opts.force) {
     throw new Error(`Ya existe un juego con ID "${id}" (usar --force para reemplazarlo)`);
   }

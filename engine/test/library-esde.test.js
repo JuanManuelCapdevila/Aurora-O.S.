@@ -17,6 +17,7 @@ function setup() {
       romsDir: path.join(root, 'ROMs'),
       esdeDir: path.join(root, 'ES-DE'),
       auroraBin: '/usr/local/bin/aurora',
+      toolsDir: '/usr/share/aurora/tools',
     },
   };
 }
@@ -35,6 +36,7 @@ test('add registra el juego con la detección y no pisa uno existente', () => {
   assert.equal(game.detected.api, 'd3d8');
   assert.equal(listGames(system.gamesDir).length, 1);
   assert.throws(() => addGame(system.gamesDir, dir), /Ya existe/);
+  assert.equal(addGame(system.gamesDir, dir, { 'if-new': true }).skipped, true);
 });
 
 test('export-esde crea un archivo por juego, el sistema y limpia los viejos', () => {
@@ -55,6 +57,7 @@ test('export-esde crea un archivo por juego, el sistema y limpia los viejos', ()
   assert.ok(fs.existsSync(path.join(romDir, 'otro.txt')));
   const xml = fs.readFileSync(r.systems.file, 'utf8');
   assert.match(xml, /<command label="Aurora">\/usr\/local\/bin\/aurora launch-rom %ROM%<\/command>/);
+  assert.match(xml, /<path>\/usr\/share\/aurora\/tools<\/path>/);
 
   // Idempotente.
   const again = exportEsde(system);

@@ -1,0 +1,13 @@
+[Unit]
+Description=Aurora: autoprueba de la imagen (solo con aurora.selftest en el kernel)
+ConditionKernelCommandLine=aurora.selftest
+After=multi-user.target NetworkManager.service systemd-tmpfiles-setup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/aurora-selftest
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Autoprueba de la imagen: la ejecuta CI arrancando el ISO en QEMU con
+# `aurora.selftest` en la línea de comandos del kernel. Imprime el resultado
+# en la consola serie y apaga.
+
+set -uo pipefail
+failures=0
+check() {
+  local desc="$1"; shift
+  if "$@" >/dev/null 2>&1; then
+    echo "AURORA-CHECK ok   $desc"
+  else
+    echo "AURORA-CHECK FAIL $desc"
+    failures=$((failures + 1))
+  fi
+}
+
+for cmd in node aurora gamescope cage es-de umu-run gamemoderun mangohud foot nmtui \
+           ryzenadj dialog rsync arch-chroot bootctl sgdisk udisksctl; do
+  check "comando $cmd" command -v "$cmd"
+done
+check "Vulkan RADV 64 bits" test -f /usr/share/vulkan/icd.d/radeon_icd.x86_64.json
+check "Vulkan RADV 32 bits" test -f /usr/share/vulkan/icd.d/radeon_icd.i686.json
+check "libvulkan 32 bits" test -f /usr/lib32/libvulkan.so.1
+check "usuario player" id player
+check "player en video e input" sh -c 'id -nG player | grep -qw video && id -nG player | grep -qw input'
+check "home de player" test "$(stat -c %U /home/player 2>/dev/null)" = player
+check "aurora help" runuser -u player -- env HOME=/home/player aurora help
+check "aurora export-esde" runuser -u player -- env HOME=/home/player aurora export-esde
+check "es_systems.xml generado" test -f /home/player/ES-DE/custom_systems/es_systems.xml
+check "herramientas de ES-DE" test -f "/usr/share/aurora/tools/Instalar Aurora en un disco.sh"
+check "greetd habilitado" systemctl is-enabled greetd.service
+check "NetworkManager activo" systemctl is-active NetworkManager.service
+check "sesión de greetd" grep -q 'user = "player"' /etc/greetd/config.toml
+
+if ((failures == 0)); then
+  echo "AURORA-SELFTEST: OK"
+else
+  echo "AURORA-SELFTEST: FAIL ($failures)"
+fi
+systemctl poweroff

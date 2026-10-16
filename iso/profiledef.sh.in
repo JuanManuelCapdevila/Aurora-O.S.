@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2034
+# Plantilla: build.sh reemplaza el marcador de bootmodes con los modos de arranque del
+# perfil releng de la versión de archiso instalada.
+
+iso_name="aurora"
+iso_label="AURORA_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
+iso_publisher="Aurora O.S. <https://github.com/JuanManuelCapdevila/Aurora-O.S.>"
+iso_application="Aurora O.S. (live e instalador)"
+iso_version="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
+install_dir="arch"
+buildmodes=('iso')
+@BOOTMODES@
+arch="x86_64"
+pacman_conf="pacman.conf"
+airootfs_image_type="squashfs"
+airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15' '-b' '1M')
+file_permissions=(
+  ["/etc/sudoers.d/10-aurora"]="0:0:440"
+  ["/opt/aurora/engine/bin/aurora.js"]="0:0:755"
+  ["/usr/local/bin/aurora-session"]="0:0:755"
+  ["/usr/local/bin/aurora-install"]="0:0:755"
+  ["/usr/local/bin/aurora-scan-games"]="0:0:755"
+  ["/usr/local/bin/aurora-prepare-proton"]="0:0:755"
+  ["/usr/local/bin/aurora-hw-report"]="0:0:755"
+  ["/usr/local/bin/aurora-selftest"]="0:0:755"
+)

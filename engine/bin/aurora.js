@@ -12,7 +12,7 @@ const { setPowerMode } = require('../src/power');
 const USAGE = `Uso: aurora <comando> [opciones]
 
   detect <archivo.exe>                 Analiza un ejecutable (API gráfica, arquitectura, input)
-  add <carpeta|exe> [--id ID] [--name NOMBRE] [--genre GENERO] [--store gog|steam] [--force]
+  add <carpeta|exe> [--id ID] [--name NOMBRE] [--genre GENERO] [--store gog|steam] [--force | --if-new]
                                        Registra un juego instalado y actualiza ES-DE
   list                                 Lista los juegos registrados
   plan <id>                            Muestra la configuración resuelta y el comando, sin ejecutar
@@ -71,7 +71,8 @@ function main() {
       return print(detectGame(positional[0]));
     case 'add': {
       if (!positional[0]) throw new Error('Falta la carpeta o el .exe');
-      const { game, file, candidates } = addGame(system.gamesDir, positional[0], flags);
+      const { game, file, candidates, skipped } = addGame(system.gamesDir, positional[0], flags);
+      if (skipped) return console.log(`Ya registrado: "${game.name}" (${game.id})`);
       console.log(`Agregado "${game.name}" (${game.id}) → ${file}`);
       console.log(`  exe: ${game.exe}`);
       console.log(`  API: ${game.detected.api} · ${game.detected.arch}`);

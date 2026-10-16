@@ -8,12 +8,14 @@ const { listGames } = require('./library');
 // Cada juego se expone como un archivo "<Nombre>.aurora" en ~/ROMs/windows cuyo
 // contenido es el ID del juego. ES-DE lo muestra (y scrapea carátulas) por el
 // nombre del archivo y al elegirlo ejecuta `aurora launch-rom <archivo>`.
+// Un segundo sistema, "Aurora: Herramientas", muestra los scripts de toolsDir
+// (Wi-Fi, buscar juegos, instalar, energía).
 
 const SYSTEM_NAME = 'windows';
 const ROM_EXT = '.aurora';
 const MARKER = '<!-- Generado por Aurora: aurora export-esde. Se sobrescribe en cada exportación. -->';
 
-function esSystemsXml(auroraBin) {
+function esSystemsXml(auroraBin, toolsDir) {
   return `<?xml version="1.0"?>
 ${MARKER}
 <systemList>
@@ -25,6 +27,15 @@ ${MARKER}
     <command label="Aurora">${auroraBin} launch-rom %ROM%</command>
     <platform>pc</platform>
     <theme>${SYSTEM_NAME}</theme>
+  </system>
+  <system>
+    <name>aurora</name>
+    <fullname>Aurora: Herramientas</fullname>
+    <path>${toolsDir}</path>
+    <extension>.sh</extension>
+    <command label="Aurora">/usr/bin/bash %ROM%</command>
+    <platform>ignore</platform>
+    <theme>desktop</theme>
   </system>
 </systemList>
 `;
@@ -46,7 +57,7 @@ function writeEsSystems(system) {
     return { file, written: false, reason: 'ya existe un es_systems.xml propio; agregar el sistema a mano' };
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, esSystemsXml(system.auroraBin));
+  fs.writeFileSync(file, esSystemsXml(system.auroraBin, system.toolsDir));
   return { file, written: true };
 }
 

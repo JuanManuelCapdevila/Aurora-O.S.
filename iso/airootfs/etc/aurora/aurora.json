@@ -1,0 +1,9 @@
+{
+  "gamesDir": "/home/player/Games",
+  "esdeDir": "/home/player/ES-DE",
+  "romsDir": "/home/player/ROMs",
+  "wrappersDir": "/usr/share/aurora/wrappers",
+  "toolsDir": "/usr/share/aurora/tools",
+  "auroraBin": "/usr/local/bin/aurora",
+  "device": "win600-3050e"
+}

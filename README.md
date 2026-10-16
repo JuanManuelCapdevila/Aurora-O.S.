@@ -11,8 +11,8 @@ Sistema operativo ligero tipo consola para la **Anbernic Win600**, pensado para 
 - **Motor de compatibilidad (`engine/`, Node.js):** detecta qué tecnología usa cada `.exe` y arma la
   configuración automáticamente. Solo los juegos problemáticos necesitan ajustes a mano.
 
-> Estado: fases 1–3 escritas y con tests del motor. **Todavía no se probó en la consola real**: falta la fase 0
-> (reconocimiento del hardware) y validar la sesión gráfica.
+> Estado: primera imagen ISO (live + instalador). El motor tiene tests y la imagen se verifica en QEMU, pero
+> **todavía no se probó en la consola real**: la sesión gráfica, el control y el rendimiento se validan ahí.
 
 ## Cómo funciona
 
@@ -36,17 +36,33 @@ Cada capa sobrescribe a la anterior (`engine/profiles/`):
 | `genre/<género>.json` | `racing`, `fps`, `rts`… | Perfil de controles, ajustes del género |
 | `overrides` en `game.json` | — | Excepciones de un juego puntual |
 
-## Instalación
+## Instalación (imagen ISO)
 
-1. Instalar Arch Linux mínimo en la Win600 (`archinstall`, perfil *minimal*, con red y systemd-boot).
-2. Clonar este repo y ejecutar como root:
+GitHub Actions construye el ISO en cada cambio, lo arranca en una máquina virtual con una autoprueba y publica
+la última versión de la rama principal en el pre-release
+[**dev**](https://github.com/JuanManuelCapdevila/Aurora-O.S./releases/tag/dev).
 
-   ```sh
-   ./install/postinstall.sh player win600-3050e
-   ./install/fetch-wrappers.sh   # opcional: wrappers para juegos de DirectDraw / D3D 1-7
-   ```
+1. Descargar `aurora-<fecha>-x86_64.iso` y grabarlo en un USB de 4 GB o más con balenaEtcher, Rufus (modo DD),
+   Ventoy o `dd`.
+2. En la Win600: **desactivar Secure Boot** en el BIOS y arrancar desde el USB (con un hub USB-C).
+3. Arranca en modo **live**: ES-DE directo, sin tocar el SSD ni Windows. Los cambios se pierden al apagar.
+4. En **Aurora: Herramientas** (dentro de ES-DE):
+   - *Configurar Wi-Fi* (necesita teclado USB o Bluetooth para la contraseña).
+   - *Descargar Proton*: baja Proton-GE y el runtime (~1,5 GB) y verifica que arranca.
+   - *Buscar juegos (microSD y USB)*: registra cada carpeta dentro de `Juegos/` en la raíz de la tarjeta o el USB.
+   - *Reporte de hardware*: lo que hace falta para ajustar la imagen a la consola.
+   - *Instalar Aurora en un disco*: en la **microSD** (Windows queda intacto) o en el SSD interno (lo borra).
 
-3. Reiniciar: arranca directo en ES-DE.
+Para construir el ISO localmente (necesita Docker):
+
+```sh
+docker run --rm --privileged -v "$PWD:/repo" archlinux:latest /repo/iso/build.sh   # → out/*.iso
+```
+
+### Instalación manual (alternativa)
+
+Sobre un Arch Linux mínimo ya instalado, como root: `./install/postinstall.sh player win600-3050e`
+(opcional: `./install/fetch-wrappers.sh`).
 
 ## Agregar juegos
 
@@ -96,10 +112,11 @@ engine/            Motor de compatibilidad (Node.js, sin dependencias)
   src/             Parser PE, detección, capas de config, armado del comando, ES-DE, energía
   profiles/        Perfiles por capas (JSON)
   test/            Tests: cd engine && npm test
-install/           postinstall.sh, listas de paquetes, fetch-wrappers.sh
-rootfs/            Archivos que se copian al sistema (greetd, sesión, zram, sysctl)
-tools/hw-report.sh Reporte de hardware (fase 0)
-docs/              Plan del proyecto y hardware
+iso/               Perfil de archiso: build.sh, paquetes, archivos solo del live (usuario, autoprueba)
+install/           Listas de paquetes, postinstall.sh (instalación manual), fetch-wrappers.sh
+rootfs/            Archivos que se copian al sistema: sesión, instalador, herramientas de ES-DE, configs
+.github/workflows/ CI: tests, construcción del ISO, autoprueba en QEMU y publicación
+docs/              Plan del proyecto
 ```
 
 ## Hoja de ruta

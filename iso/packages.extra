@@ -1,0 +1,20 @@
+# Paquetes que solo necesita la imagen (se suman a install/packages.txt y a
+# install/aur.txt para formar packages.x86_64).
+
+# Sistema base y arranque del live
+base
+linux
+linux-firmware
+amd-ucode
+sof-firmware
+mkinitcpio
+mkinitcpio-archiso
+syslinux
+
+# Instalador (aurora-install)
+arch-install-scripts
+dosfstools
+e2fsprogs
+gptfdisk
+parted
+rsync

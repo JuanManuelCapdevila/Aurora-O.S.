@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Busca juegos en las microSD y memorias USB conectadas y los registra.
+#
+# Convención: cada juego en su propia carpeta dentro de "Juegos" en la raíz de
+# la tarjeta o del USB (ej. /Juegos/GTA San Andreas/gta_sa.exe). También se
+# revisa ~/Juegos en el disco interno.
+#
+# Uso: aurora-scan-games [--pause]
+
+set -uo pipefail
+
+pause() { [[ "${1:-}" == "--pause" ]] && read -rp $'\nPresioná Enter para volver...' _; }
+
+echo "Montando tarjetas y memorias USB..."
+# Lee un campo de una línea de `lsblk -P` (KEY="valor"). El ancla evita que
+# TYPE coincida dentro de FSTYPE.
+field() { [[ "$1" =~ (^|\ )$2=\"([^\"]*)\" ]] && printf '%s' "${BASH_REMATCH[2]}"; }
+while read -r line; do
+  name="$(field "$line" NAME)"
+  fstype="$(field "$line" FSTYPE)"
+  [[ "$(field "$line" TYPE)" == "part" && -n "$fstype" && -z "$(field "$line" MOUNTPOINT)" ]] || continue
+  [[ "$(field "$line" RM)" == "1" || "$(field "$line" HOTPLUG)" == "1" || "$name" == /dev/mmcblk* ]] || continue
+  [[ "$fstype" == "iso9660" || "$fstype" == "swap" ]] && continue
+  udisksctl mount --no-user-interaction -b "$name" >/dev/null 2>&1 && echo "  montado $name"
+done < <(lsblk -Ppno NAME,TYPE,RM,HOTPLUG,FSTYPE,MOUNTPOINT)
+
+shopt -s nullglob nocaseglob
+dirs=(/run/media/"$(id -un)"/*/juegos/*/ "$HOME"/juegos/*/)
+shopt -u nocaseglob
+
+if ((${#dirs[@]} == 0)); then
+  echo
+  echo "No se encontraron juegos."
+  echo "Copiá cada juego en su propia carpeta dentro de una carpeta \"Juegos\""
+  echo "en la raíz de la microSD o del USB, y volvé a intentar."
+  pause "${1:-}"
+  exit 0
+fi
+
+added=0
+failed=0
+for dir in "${dirs[@]}"; do
+  dir="${dir%/}"
+  if out="$(aurora add "$dir" --if-new 2>&1)"; then
+    case "$out" in
+      "Ya registrado"*) ;;
+      *) added=$((added + 1)); echo; echo "$out" | head -n 3 ;;
+    esac
+  else
+    failed=$((failed + 1))
+    echo; echo "No se pudo agregar $dir:"; echo "  $out"
+  fi
+done
+
+echo
+echo "Juegos nuevos: $added · Con errores: $failed · Revisados: ${#dirs[@]}"
+((added > 0)) && echo "Para verlos en ES-DE: Menú → Utilities → Rescan ROM directory."
+pause "${1:-}"

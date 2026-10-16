@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Descarga Proton-GE y el runtime de Steam que usa umu (aprox. 1,5 GB) creando
+# un prefijo de prueba. Así el primer juego no tiene que esperar la descarga y
+# se verifica que Proton arranca en la consola.
+
+set -uo pipefail
+
+export GAMEID=umu-default
+export PROTONPATH=GE-Proton
+export WINEPREFIX="$HOME/Games/.proton-check"
+
+echo "Descargando Proton-GE y el runtime (puede tardar varios minutos)..."
+if umu-run wineboot -u; then
+  echo
+  echo "Proton listo."
+else
+  echo
+  echo "Falló la preparación de Proton. ¿Hay conexión a Internet?"
+fi
+read -rp $'\nPresioná Enter para volver...' _

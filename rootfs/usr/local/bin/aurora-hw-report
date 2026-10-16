@@ -2,7 +2,7 @@
 # Fase 0: genera un reporte del hardware de la consola para docs/hardware.md.
 # Se puede correr desde cualquier Linux (USB live incluido). No modifica nada.
 #
-# Uso: ./tools/hw-report.sh [archivo-de-salida]
+# Uso: aurora-hw-report [archivo-de-salida]
 
 set -uo pipefail
 

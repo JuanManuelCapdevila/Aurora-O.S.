@@ -47,3 +47,17 @@ zram-generator
 # Fuentes que usan muchos juegos viejos
 ttf-liberation
 noto-fonts
+
+# Wi-Fi y discos externos
+wpa_supplicant
+wireless-regdb
+udisks2
+polkit
+exfatprogs
+ntfs-3g
+
+# Herramientas de ES-DE (terminal, menús)
+dialog
+foot
+ttf-dejavu
+less
