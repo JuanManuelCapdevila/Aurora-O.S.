@@ -30,7 +30,13 @@ fi
 if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
   printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
 fi
+# La imagen de Docker de Arch excluye idiomas, traducciones y manuales
+# (NoExtract). Se quitan esas reglas: si no, el ISO las hereda y no se pueden
+# generar las configuraciones regionales (ES-DE en español, etc.).
+sed -i '/^NoExtract/d' /etc/pacman.conf
 pacman -Syu --noconfirm --needed archiso base-devel git sudo jq nodejs librsvg ttf-roboto
+# Reinstala glibc para recuperar las definiciones de idioma excluidas.
+pacman -S --noconfirm glibc
 rm -rf "$BUILD_DIR"
 mkdir -p "$PROFILE" "$LOCAL_REPO" "$OUT_DIR"
 

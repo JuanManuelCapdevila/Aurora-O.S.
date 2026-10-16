@@ -122,7 +122,7 @@ jobs:
             | tee qemu/serial.log || true
           grep 'AURORA-CHECK' qemu/serial.log || true
           if ! grep -q 'AURORA-SELFTEST: OK' qemu/serial.log; then
-            report="$( (grep 'AURORA-CHECK' qemu/serial.log; echo '--- final del log ---'; tail -n 40 qemu/serial.log) \
+            report="$( (grep -E 'AURORA-CHECK FAIL|AURORA-INFO' qemu/serial.log; echo '--- final del log ---'; tail -n 25 qemu/serial.log) \
               | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
             echo "::error title=autoprueba::$report"
             exit 1
