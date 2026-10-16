@@ -123,7 +123,7 @@ sudo -u "$AURORA_USER" mkdir -p "$USER_HOME/Games" "$USER_HOME/ROMs/windows"
 sudo -u "$AURORA_USER" HOME="$USER_HOME" /usr/local/bin/aurora export-esde
 
 log "Activando servicios"
-systemctl enable greetd.service NetworkManager.service bluetooth.service
+systemctl enable greetd.service NetworkManager.service bluetooth.service aurora-locale.service
 systemctl set-default graphical.target
 
 if ((${#FAILED[@]})); then

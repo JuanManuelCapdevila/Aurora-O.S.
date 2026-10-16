@@ -41,6 +41,8 @@ check "greetd habilitado" systemctl is-enabled greetd.service
 check "NetworkManager activo" systemctl is-active NetworkManager.service
 check "sesión de greetd" grep -q 'user = "player"' /etc/greetd/config.toml
 # Información útil en el log de CI (no cuenta como chequeo).
+echo "AURORA-INFO locales: $(locale -a 2>/dev/null | tr '\n' ' ')"
+echo "AURORA-INFO aurora-locale: $(systemctl is-active aurora-locale.service)"
 echo "AURORA-INFO icd: $(find /usr/share/vulkan/icd.d/ -maxdepth 1 -name '*.json' -printf '%f ' 2>/dev/null)"
 
 if ((failures == 0)); then

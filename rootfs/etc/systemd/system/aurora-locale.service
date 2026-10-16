@@ -1,0 +1,12 @@
+[Unit]
+Description=Aurora: generar configuraciones regionales faltantes
+Before=greetd.service aurora-selftest.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/aurora-locale
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

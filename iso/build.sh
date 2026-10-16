@@ -144,6 +144,7 @@ ln -sf /usr/lib/systemd/system/greetd.service "$units/display-manager.service"
 ln -sf /usr/lib/systemd/system/NetworkManager.service "$units/multi-user.target.wants/NetworkManager.service"
 ln -sf /usr/lib/systemd/system/bluetooth.service "$units/bluetooth.target.wants/bluetooth.service"
 ln -sf /etc/systemd/system/aurora-selftest.service "$units/multi-user.target.wants/aurora-selftest.service"
+ln -sf /etc/systemd/system/aurora-locale.service "$units/multi-user.target.wants/aurora-locale.service"
 ln -sf /usr/share/zoneinfo/America/Argentina/Buenos_Aires "$AIROOTFS/etc/localtime"
 
 log "Construyendo el ISO"
