@@ -45,7 +45,11 @@ while read -r pkg; do
   sudo -u builder git clone --depth 1 "https://aur.archlinux.org/$pkg.git" "$aur_dir/$pkg"
   [[ -f "$aur_dir/$pkg/PKGBUILD" ]] || die "el paquete $pkg no existe en el AUR (revisar install/aur.txt)"
   (cd "$aur_dir/$pkg" && sudo -u builder makepkg -s --noconfirm --needed)
-  find "$aur_dir/$pkg" -maxdepth 1 -name '*.pkg.tar.zst' ! -name '*-debug-*' -exec cp {} "$LOCAL_REPO/" \;
+  mapfile -t built < <(find "$aur_dir/$pkg" -maxdepth 1 -name '*.pkg.tar.zst' ! -name '*-debug-*')
+  cp "${built[@]}" "$LOCAL_REPO/"
+  # Se instala en el contenedor para que los paquetes siguientes de la lista
+  # puedan depender de este (ej. freeimage → emulationstation-de).
+  pacman -U --noconfirm --needed "${built[@]}"
 done < <(read_list "$REPO_DIR/install/aur.txt")
 # Base de datos del repo local (puede quedar vacía si todo está en los oficiales).
 shopt -s nullglob

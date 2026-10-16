@@ -2,5 +2,7 @@
 # prueba con pacman y, si no existen, los compila desde el AUR.
 # Verificar los nombres en https://aur.archlinux.org si alguno falla.
 # umu-launcher se instala aparte con install/fetch-umu.sh (versión zipapp).
+# El orden importa: las dependencias del AUR van antes que quien las usa.
+freeimage
 emulationstation-de
 ryzenadj-git
