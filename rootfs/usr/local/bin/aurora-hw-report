@@ -34,7 +34,7 @@ summary() {
     printf 'Pantalla: %s %s\n' "${c##*/card?-}" "$(head -n1 "$c/modes" 2>/dev/null)"
   done
   grep -E '^N: Name' /proc/bus/input/devices 2>/dev/null | sed 's/^N: Name="\(.*\)"/\1/' |
-    grep -Ei 'pad|x-box|xbox|controller|joystick|touch' | sed 's/^/Entrada:  /'
+    grep -Ei 'pad|x-box|xbox|controller|joystick|touch|keyboard|mouse' | sed 's/^/Entrada:  /'
   for b in /sys/class/power_supply/BAT*; do
     [[ -r "$b/capacity" ]] && printf 'Batería:  %s%% (%s)\n' "$(cat "$b/capacity")" "$(cat "$b/status" 2>/dev/null)"
   done

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ajustes de Aurora: vistas gráficas (pygame) con el estilo del menú.
 
-Uso: aurora-settings wifi | power | proton | scan | hardware | update | quickmenu
+Uso: aurora-settings wifi | power | proton | scan | hardware | update | input | quickmenu
 
 Se maneja con el control (cruceta/stick, A, B, X, Y) o con teclado (flechas,
 Enter, Esc, Retroceso, Tab). Los recursos (fondo, fuentes, íconos) salen del
@@ -908,6 +908,145 @@ class HardwareView(View):
                 break
 
 
+class InputTestView(View):
+    """Muestra en vivo qué manda cada botón (lee /dev/input directo, sin pasar por SDL).
+
+    Sirve aunque el control no funcione en las demás vistas. Se sale manteniendo
+    cualquier botón 2 segundos o sin tocar nada durante 30. Todo queda anotado en
+    ~/input-test.txt.
+    """
+
+    title, accent, glyph = "Probar control", (0, 121, 107), "gamepad"
+    help = ()
+    HOLD_EXIT, IDLE_EXIT = 2.0, 30.0
+    LOG = os.path.expanduser("~/input-test.txt")
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.devices = []  # (nombre, tipo, ruta)
+        self.events = []
+        self.held = {}  # (ruta, código) -> desde cuándo
+        self.last_input = time.monotonic()
+        self.error = None
+        self.lock = threading.Lock()
+        try:
+            self.log = open(self.LOG, "w")
+        except OSError:
+            self.log = None
+        threading.Thread(target=self._read, daemon=True).start()
+
+    @staticmethod
+    def kind(dev, e):
+        caps = dev.capabilities()
+        keys = set(caps.get(e.EV_KEY, []))
+        if e.BTN_SOUTH in keys or e.BTN_GAMEPAD in keys or e.BTN_JOYSTICK in keys:
+            return "control"
+        if e.ABS_MT_POSITION_X in dict(caps.get(e.EV_ABS, [])) or e.BTN_TOUCH in keys:
+            return "táctil"
+        if e.BTN_LEFT in keys or e.EV_REL in caps:
+            return "mouse"
+        if e.KEY_A in keys or e.KEY_ENTER in keys or e.KEY_ESC in keys:
+            return "teclado"
+        return "botones"
+
+    def _write(self, line):
+        if self.log:
+            self.log.write(line + "\n")
+            self.log.flush()
+
+    def _read(self):
+        try:
+            import select
+            import evdev
+            from evdev import ecodes as e
+        except ImportError:
+            self.error = "Falta python-evdev."
+            return
+        devs = {}
+        for path in evdev.list_devices():
+            try:
+                dev = evdev.InputDevice(path)
+            except OSError:
+                continue
+            devs[dev.fd] = dev
+            info = (dev.name, self.kind(dev, e), path)
+            self.devices.append(info)
+            self._write(f"dispositivo: {info[0]} [{info[1]}] {path} {dev.info}")
+        if not devs:
+            self.error = "No se pudo abrir ningún dispositivo de entrada (¿grupo input?)."
+            return
+        while self.app.running:
+            ready, _, _ = select.select(list(devs), [], [], 0.2)
+            for fd in ready:
+                dev = devs[fd]
+                try:
+                    events = list(dev.read())
+                except OSError:
+                    del devs[fd]
+                    continue
+                for ev in events:
+                    if ev.type == e.EV_KEY and ev.value in (0, 1):
+                        name = e.KEY.get(ev.code) or e.BTN.get(ev.code) or ev.code
+                        name = name[0] if isinstance(name, list) else name
+                        self.on_event(dev, f"{name} {'apretado' if ev.value else 'suelto'}", (dev.path, ev.code), ev.value)
+                    elif ev.type == e.EV_ABS and ev.code in (e.ABS_HAT0X, e.ABS_HAT0Y) and ev.value:
+                        self.on_event(dev, f"{e.ABS[ev.code]} {ev.value:+d}", None, None)
+                    elif ev.type == e.EV_REL and ev.code in (e.REL_X, e.REL_Y):
+                        self.last_input = time.monotonic()  # el mouse se mueve: no cuenta como evento
+
+    def on_event(self, dev, desc, key, value):
+        now = time.monotonic()
+        with self.lock:
+            self.last_input = now
+            if key is not None:
+                if value:
+                    self.held[key] = now
+                else:
+                    self.held.pop(key, None)
+            line = f"{dev.name}: {desc}"
+            if not self.events or self.events[-1] != line:
+                self.events.append(line)
+                self.events = self.events[-11:]
+                self._write(line)
+
+    def handle(self, action):
+        pass  # se sale solo con el botón mantenido o por inactividad
+
+    def update(self):
+        now = time.monotonic()
+        with self.lock:
+            hold = max((now - t for t in self.held.values()), default=0)
+        if hold >= self.HOLD_EXIT or now - self.last_input >= self.IDLE_EXIT:
+            self.app.pop()
+
+    def draw(self, surf):
+        now = time.monotonic()
+        with self.lock:
+            hold = max((now - t for t in self.held.values()), default=0)
+            events = list(self.events)
+        text(surf, "Apretá cada botón. Para salir, mantené uno apretado 2 segundos.", (90, 70), 22, TEXT_DIM)
+        rounded(surf, CARD, (80, 108, 470, 520), 18)
+        text(surf, "Dispositivos", (110, 128), 24, medium=True)
+        y = 170
+        for name, kind, _path in self.devices[:12]:
+            text(surf, kind, (110, y), 20, OK if kind == "control" else TEXT_DIM, medium=True)
+            text(surf, name, (210, y), 20, max_width=320)
+            y += 36
+        if self.error:
+            for i, line in enumerate(wrap(self.error, 22, 420)):
+                text(surf, line, (110, y + i * 30), 22, ERR)
+        rounded(surf, CARD, (580, 108, W - 660, 520), 18)
+        text(surf, "Lo que llega", (610, 128), 24, medium=True)
+        if not events:
+            text(surf, "Esperando…", (610, 170), 22, TEXT_DIM)
+        for i, line in enumerate(events):
+            text(surf, line, (610, 170 + i * 40), 21, TEXT if i == len(events) - 1 else TEXT_DIM, max_width=W - 720)
+        if hold > 0.3:
+            w = int((W - 160) * min(1, hold / self.HOLD_EXIT))
+            rounded(surf, (*self.accent, 255), (80, 644, w, 10), 5)
+        text(surf, f"Se guarda en {self.LOG}", (90, 690), 18, TEXT_DIM)
+
+
 class QuickMenuView(View):
     """Menú rápido sobre un juego en pausa (lo abre aurora-hotkeys con Select + Start).
 
@@ -1094,7 +1233,8 @@ def get_battery():
 
 
 VIEWS = {"wifi": WifiView, "power": PowerView, "proton": ProtonView, "scan": ScanView, "hardware": HardwareView,
-         "update": UpdateView, "quickmenu": QuickMenuView}
+         "update": UpdateView, "input": InputTestView,
+         "quickmenu": QuickMenuView}
 
 
 # --- Aplicación -----------------------------------------------------------------

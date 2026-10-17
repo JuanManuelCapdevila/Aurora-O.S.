@@ -86,6 +86,11 @@
       "color": "#00ACC1",
       "glyph": "info"
     },
+    "Probar control": {
+      "label": "Control",
+      "color": "#00796B",
+      "glyph": "gamepad"
+    },
     "Actualizar": {
       "label": "Actualizar",
       "color": "#00897B",
