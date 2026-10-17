@@ -54,6 +54,7 @@ la última versión de la rama principal en el pre-release
    - *Proton*: lo descarga o actualiza (~1,5 GB) para los juegos de Windows.
    - *Buscar juegos*: registra cada carpeta dentro de `Juegos/` en la raíz de la microSD o un USB.
    - *Hardware*: resumen del hardware de la consola.
+   - *Actualizar*: instala la última versión de Aurora sin regrabar el USB (ver abajo).
    - *Instalar Aurora*: en la **microSD** (Windows queda intacto) o en el SSD interno (lo borra).
    Las entradas de Ajustes no cuentan como juegos ni aparecen en *Todos*.
 5. Durante un juego:
@@ -65,6 +66,25 @@ Para construir el ISO localmente (necesita Docker):
 
 ```sh
 docker run --rm --privileged -v "$PWD:/repo" archlinux:latest /repo/iso/build.sh   # → out/*.iso
+```
+
+### Actualizaciones
+
+Cada build de CI publica, junto al ISO, un paquete chico (`aurora-update.tar.zst`, menos de 1 MB) con la capa
+de Aurora: scripts, motor, tema y configuraciones. **Ajustes → Actualizar** (o `aurora-update apply`) lo
+descarga, verifica la suma SHA-256, guarda una copia de lo que reemplaza y lo instala; si la versión nueva
+necesita paquetes de Arch que faltan, los instala antes con `pacman -Syu`. Los juegos, los prefijos de Wine y
+las partidas no se tocan.
+
+- `aurora-update check`: compara la versión instalada (`/etc/aurora/version`) con la publicada.
+- `aurora-update rollback` (o **X** en Ajustes → Actualizar): vuelve a la versión anterior.
+- Lo que sigue necesitando un ISO nuevo: cambios del kernel o del arranque del live, y paquetes nuevos del AUR.
+
+Para una instalación anterior a `aurora-update`, desde la Terminal de Ajustes:
+
+```sh
+curl -fsSL https://github.com/JuanManuelCapdevila/Aurora-O.S./releases/download/dev/aurora-update -o /tmp/aurora-update
+sudo bash /tmp/aurora-update apply
 ```
 
 ### Instalación manual (alternativa)

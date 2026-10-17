@@ -11,6 +11,8 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="${OUT_DIR:-$REPO_DIR/out}"
 BUILD_DIR="${BUILD_DIR:-/tmp/aurora-build}"
+# Versión de Aurora (la pasa CI con fecha y commit). Va en /etc/aurora/version.
+AURORA_VERSION="${AURORA_VERSION:-$(date -u +%Y.%m.%d.%H%M)-local}"
 PROFILE="$BUILD_DIR/profile"
 LOCAL_REPO="$BUILD_DIR/localrepo"
 AURORA_USER=player
@@ -126,21 +128,39 @@ read_list "$REPO_DIR/iso/packages.extra" "$REPO_DIR/install/packages.txt" "$REPO
   sort -u > "$PROFILE/packages.x86_64"
 
 log "Copiando archivos del sistema"
+# La capa Aurora se arma aparte: va al ISO y, empaquetada, es la actualización
+# que descargan los sistemas ya instalados (aurora-update).
+LAYER="$BUILD_DIR/layer"
+rm -rf "$LAYER"
+"$REPO_DIR/install/stage-aurora.sh" "$LAYER" "$AURORA_VERSION"
 AIROOTFS="$PROFILE/airootfs"
 mkdir -p "$AIROOTFS"
-cp -a "$REPO_DIR/rootfs/." "$AIROOTFS/"
+cp -a "$LAYER/." "$AIROOTFS/"
 cp -a "$REPO_DIR/iso/airootfs/." "$AIROOTFS/"
 sed -i "s/@AURORA_USER@/$AURORA_USER/" "$AIROOTFS/etc/greetd/config.toml"
-# El instalador agrega los mismos parámetros a la entrada de arranque del sistema instalado.
-install -Dm644 "$REPO_DIR/iso/kernel-params" "$AIROOTFS/etc/aurora/kernel-params"
 # pacman.conf del sistema instalado: el de Arch con multilib (sin el repo local).
 cp /etc/pacman.conf "$AIROOTFS/etc/pacman.conf"
 
-mkdir -p "$AIROOTFS/opt/aurora"
-cp -a "$REPO_DIR/engine" "$AIROOTFS/opt/aurora/engine"
-rm -rf "$AIROOTFS/opt/aurora/engine/test"
-ln -sf /opt/aurora/engine/bin/aurora.js "$AIROOTFS/usr/local/bin/aurora"
-"$REPO_DIR/install/fetch-umu.sh" "$AIROOTFS/usr/local/bin"
+log "Paquete de actualización $AURORA_VERSION"
+# Sin entradas de directorios: al extraer en / no se tocan los permisos de
+# /usr, /etc, etc.
+(cd "$LAYER" && find . ! -type d -printf '%P\n' | LC_ALL=C sort) > "$BUILD_DIR/layer.files"
+tar -C "$LAYER" --owner=0 --group=0 --numeric-owner --no-recursion -T "$BUILD_DIR/layer.files" \
+  --zstd -cf "$OUT_DIR/aurora-update.tar.zst"
+read_list "$REPO_DIR/install/packages.txt" "$REPO_DIR/iso/packages.extra" | sort -u > "$BUILD_DIR/repo-packages"
+read_list "$REPO_DIR/install/aur.txt" | sort -u > "$BUILD_DIR/aur-packages"
+jq -n --arg version "$AURORA_VERSION" \
+  --arg sha256 "$(sha256sum "$OUT_DIR/aurora-update.tar.zst" | cut -d' ' -f1)" \
+  --argjson size "$(stat -c %s "$OUT_DIR/aurora-update.tar.zst")" \
+  --rawfile packages "$BUILD_DIR/repo-packages" --rawfile aur "$BUILD_DIR/aur-packages" \
+  '{version: $version, sha256: $sha256, size: $size, file: "aurora-update.tar.zst",
+    packages: ($packages | split("\n") | map(select(. != ""))),
+    aur: ($aur | split("\n") | map(select(. != "")))}' > "$OUT_DIR/aurora-update.json"
+cp "$REPO_DIR/rootfs/usr/local/bin/aurora-update" "$OUT_DIR/aurora-update"
+# Lista de archivos de esta versión: aurora-update la usa para borrar los que
+# ya no estén en la siguiente.
+install -Dm644 "$BUILD_DIR/layer.files" "$AIROOTFS/var/lib/aurora/update/files.txt"
+
 # Configuraciones regionales: se generan en el contenedor (misma glibc que la
 # imagen) y se copia el archivo resultante.
 cp "$REPO_DIR/iso/airootfs/etc/locale.gen" /etc/locale.gen

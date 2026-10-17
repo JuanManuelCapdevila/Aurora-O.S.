@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+# Actualiza la capa Aurora (scripts, motor, tema, configuraciones) sin regrabar
+# el ISO. Descarga el paquete que publica CI junto con la imagen, lo verifica,
+# guarda una copia de lo que reemplaza (para volver atrás) y lo instala.
+# Si la versión nueva necesita paquetes de Arch que no están, los instala antes.
+#
+# Uso:
+#   aurora-update check            ¿hay una versión nueva? (código 0 = sí, 1 = no, 2 = error)
+#   aurora-update apply [--force]  descarga e instala la última versión
+#   aurora-update rollback         vuelve a la versión anterior a la última actualización
+#   aurora-update version          versión instalada
+#
+# Variables (para pruebas): AURORA_ROOT (raíz, por defecto /), AURORA_UPDATE_URL
+# (carpeta con aurora-update.json), AURORA_SKIP_PACKAGES=1 (no usar pacman).
+
+set -euo pipefail
+
+ROOT="${AURORA_ROOT:-/}"
+ROOT="${ROOT%/}"
+DEFAULT_URL="https://github.com/JuanManuelCapdevila/Aurora-O.S./releases/download/dev"
+STATE="$ROOT/var/lib/aurora/update"
+CACHE="$ROOT/var/cache/aurora"
+VERSION_FILE="$ROOT/etc/aurora/version"
+PARAMS_FILE="$ROOT/etc/aurora/kernel-params"
+BOOT_ENTRY="$ROOT/boot/loader/entries/aurora.conf"
+
+say() { printf '%s\n' "$*"; }
+fail() {
+  say "Error: $*" >&2
+  exit 2
+}
+
+installed_version() { cat "$VERSION_FILE" 2>/dev/null || echo "desconocida"; }
+
+update_url() {
+  if [[ -n "${AURORA_UPDATE_URL:-}" ]]; then
+    echo "${AURORA_UPDATE_URL%/}"
+    return
+  fi
+  local url
+  url="$(jq -r '.updateUrl // empty' "$ROOT/etc/aurora/aurora.json" 2>/dev/null || true)"
+  echo "${url:-$DEFAULT_URL}"
+}
+
+fetch_manifest() {
+  local url
+  url="$(update_url)/aurora-update.json"
+  curl -fsSL --retry 3 --connect-timeout 15 "$url" ||
+    fail "no se pudo consultar $url. ¿Hay conexión a Internet?"
+}
+
+need_root() {
+  if [[ "$ROOT" == "" && $EUID -ne 0 ]]; then
+    exec sudo -n "$0" "$@"
+  fi
+}
+
+cmd_check() {
+  local manifest available current
+  manifest="$(fetch_manifest)"
+  available="$(jq -r .version <<<"$manifest")"
+  current="$(installed_version)"
+  say "Instalada: $current"
+  say "Disponible: $available"
+  if [[ "$available" == "$current" ]]; then
+    say "Aurora está actualizado."
+    return 1
+  fi
+  say "Hay una versión nueva."
+}
+
+# Rutas del paquete: relativas y sin "..".
+check_paths() {
+  local path
+  while read -r path; do
+    [[ "$path" != /* && "/$path/" != */../* ]] || fail "ruta inválida en el paquete: $path"
+  done <"$1"
+}
+
+install_packages() {
+  local manifest="$1" missing aur_missing
+  [[ -z "$ROOT" && "${AURORA_SKIP_PACKAGES:-}" != 1 ]] || return 0
+  mapfile -t missing < <(jq -r '.packages[]' <<<"$manifest" | xargs -r pacman -T || true)
+  if ((${#missing[@]})); then
+    say "Paquetes nuevos: ${missing[*]}"
+    say "Actualizando el sistema e instalándolos (puede tardar)..."
+    pacman -Syu --needed --noconfirm "${missing[@]}" || fail "no se pudieron instalar los paquetes nuevos"
+  fi
+  mapfile -t aur_missing < <(jq -r '.aur[]' <<<"$manifest" | xargs -r pacman -T || true)
+  if ((${#aur_missing[@]})); then
+    say "Aviso: faltan paquetes del AUR (${aur_missing[*]}): hacen falta con el ISO nuevo."
+  fi
+}
+
+update_boot_entry() {
+  local old_params="$1" new_params line
+  new_params="$(cat "$PARAMS_FILE" 2>/dev/null || true)"
+  [[ "$old_params" != "$new_params" && -f "$BOOT_ENTRY" ]] || return 0
+  line="$(grep -m1 '^options ' "$BOOT_ENTRY")" || return 0
+  if [[ -n "$old_params" && "$line" == *"$old_params"* ]]; then
+    line="${line/"$old_params"/"$new_params"}"
+  else
+    line="$line $new_params"
+  fi
+  # Sin espacios repetidos ni al final.
+  line="$(tr -s ' ' <<<"$line" | sed 's/ $//')"
+  sed -i "s|^options .*|${line//|/\\|}|" "$BOOT_ENTRY"
+  say "Entrada de arranque actualizada: $line"
+}
+
+after_update() {
+  [[ -z "$ROOT" ]] || return 0
+  systemctl daemon-reload 2>/dev/null || true
+  udevadm control --reload-rules 2>/dev/null || true
+  systemd-tmpfiles --create 2>/dev/null || true
+  local user="${SUDO_USER:-player}"
+  if id "$user" &>/dev/null; then
+    sudo -u "$user" -H aurora export-esde >/dev/null 2>&1 || true
+  fi
+}
+
+cmd_apply() {
+  local force=0
+  [[ "${1:-}" == "--force" ]] && force=1
+  need_root apply "$@"
+
+  mkdir -p "$STATE" "$CACHE"
+  exec 9>"$CACHE/.lock"
+  flock -n 9 || fail "ya hay una actualización en curso"
+
+  say "Buscando actualizaciones..."
+  local manifest available current
+  manifest="$(fetch_manifest)"
+  available="$(jq -r .version <<<"$manifest")"
+  current="$(installed_version)"
+  if [[ "$available" == "$current" && $force -eq 0 ]]; then
+    say "Aurora ya está actualizado ($current)."
+    return 0
+  fi
+  say "Actualizando de $current a $available"
+  [[ -d "$ROOT/run/archiso" ]] && say "Aviso: en modo live los cambios se pierden al apagar."
+
+  local file sha size archive
+  file="$(jq -r .file <<<"$manifest")"
+  sha="$(jq -r .sha256 <<<"$manifest")"
+  size="$(jq -r .size <<<"$manifest")"
+  [[ "$file" =~ ^[A-Za-z0-9._-]+$ ]] || fail "nombre de paquete inválido: $file"
+  archive="$CACHE/$file"
+  say "Descargando $((size / 1024 / 1024 + 1)) MB..."
+  curl -fsSL --retry 3 --connect-timeout 15 -o "$archive.part" "$(update_url)/$file" ||
+    fail "no se pudo descargar la actualización"
+  [[ "$(sha256sum "$archive.part" | cut -d' ' -f1)" == "$sha" ]] ||
+    fail "la descarga está dañada (no coincide la suma de verificación). Probá de nuevo."
+  mv "$archive.part" "$archive"
+
+  local new_files="$CACHE/files.new"
+  tar --zstd -tf "$archive" | sed 's|^\./||' | grep -v '/$' | LC_ALL=C sort -u >"$new_files"
+  check_paths "$new_files"
+
+  install_packages "$manifest"
+
+  say "Guardando una copia para poder volver atrás..."
+  local old_files="$STATE/files.txt" backup_list="$CACHE/backup.list"
+  touch "$old_files"
+  : >"$backup_list"
+  : >"$STATE/rollback.new"
+  local path
+  while read -r path; do
+    if [[ -e "$ROOT/$path" || -L "$ROOT/$path" ]]; then
+      echo "$path" >>"$backup_list"
+    else
+      echo "$path" >>"$STATE/rollback.new"
+    fi
+  done < <(LC_ALL=C sort -u "$new_files" "$old_files")
+  tar -C "$ROOT/" --zstd --no-recursion -cf "$STATE/rollback.tar.zst" -T "$backup_list"
+  cp "$old_files" "$STATE/rollback.files"
+
+  local old_params
+  old_params="$(cat "$PARAMS_FILE" 2>/dev/null || true)"
+
+  # Lo que estaba en la versión anterior y ya no está en la nueva se borra.
+  while read -r path; do
+    [[ -n "$path" ]] || continue
+    if [[ -f "$ROOT/$path" || -L "$ROOT/$path" ]]; then
+      rm -f "$ROOT/$path"
+    fi
+  done < <(LC_ALL=C comm -23 <(LC_ALL=C sort -u "$old_files") "$new_files")
+
+  say "Instalando..."
+  tar -C "$ROOT/" --zstd -xf "$archive" --no-overwrite-dir --keep-directory-symlink
+  cp "$new_files" "$old_files"
+  rm -f "$archive"
+
+  update_boot_entry "$old_params"
+  after_update
+  say "Aurora actualizado a $available."
+}
+
+cmd_rollback() {
+  need_root rollback
+  [[ -f "$STATE/rollback.tar.zst" ]] || fail "no hay una actualización para deshacer"
+  local from old_params path
+  from="$(installed_version)"
+  old_params="$(cat "$PARAMS_FILE" 2>/dev/null || true)"
+  while read -r path; do
+    [[ -n "$path" ]] && rm -f "$ROOT/$path"
+  done <"$STATE/rollback.new"
+  tar -C "$ROOT/" --zstd -xf "$STATE/rollback.tar.zst" --no-overwrite-dir --keep-directory-symlink
+  cp "$STATE/rollback.files" "$STATE/files.txt"
+  rm -f "$STATE/rollback.tar.zst" "$STATE/rollback.new" "$STATE/rollback.files"
+  update_boot_entry "$old_params"
+  after_update
+  say "Se volvió de $from a $(installed_version)."
+}
+
+case "${1:-}" in
+  check) cmd_check ;;
+  apply) shift && cmd_apply "$@" ;;
+  rollback) cmd_rollback ;;
+  version) installed_version ;;
+  *)
+    say "Uso: aurora-update check | apply [--force] | rollback | version" >&2
+    exit 2
+    ;;
+esac

@@ -16,7 +16,7 @@ check() {
 }
 
 for cmd in node aurora gamescope cage es-de umu-run gamemoderun mangohud foot nmtui \
-           ryzenadj dialog rsync aurora-logs aurora-display wlr-randr aurora-settings aurora-padkeys aurora-hotkeys wpctl busctl aurora-tool arch-chroot bootctl sgdisk udisksctl; do
+           ryzenadj dialog rsync aurora-logs aurora-display wlr-randr aurora-settings aurora-padkeys aurora-hotkeys aurora-update wpctl busctl zstd aurora-tool arch-chroot bootctl sgdisk udisksctl; do
   check "comando $cmd" command -v "$cmd"
 done
 check "python-evdev (control en herramientas)" python3 -c "import evdev"
@@ -43,6 +43,9 @@ check "íconos de herramientas" test -f /usr/share/aurora/es-de/media/aurora/cov
 check "tema enlazado en ES-DE" test -f /home/player/ES-DE/themes/aurora-material/theme.xml
 check "configuración regional es_ES (menús de ES-DE)" sh -c "locale -a | grep -qi '^es_ES.utf8'"
 check "configuración inicial de ES-DE" grep -q aurora-material /home/player/ES-DE/settings/es_settings.xml
+check "versión de Aurora" test -s /etc/aurora/version
+check "lista de archivos para aurora-update" test -s /var/lib/aurora/update/files.txt
+check "aurora-update version" aurora-update version
 check "greetd habilitado" systemctl is-enabled greetd.service
 check "NetworkManager activo" systemctl is-active NetworkManager.service
 check "sesión de greetd" grep -q 'user = "player"' /etc/greetd/config.toml

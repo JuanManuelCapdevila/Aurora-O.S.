@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ajustes de Aurora: vistas gráficas (pygame) con el estilo del menú.
 
-Uso: aurora-settings wifi | power | proton | scan | hardware | quickmenu
+Uso: aurora-settings wifi | power | proton | scan | hardware | update | quickmenu
 
 Se maneja con el control (cruceta/stick, A, B, X, Y) o con teclado (flechas,
 Enter, Esc, Retroceso, Tab). Los recursos (fondo, fuentes, íconos) salen del
@@ -791,6 +791,82 @@ class ScanView(TaskView):
                                   (("Recargar ahora", self.app.restart_frontend), ("Más tarde", None))))
 
 
+class UpdateView(TaskView):
+    title, accent, glyph = "Actualizar", (0, 137, 123), "update"
+    intro = ("Descarga e instala la última versión de Aurora (interfaz, herramientas y ajustes) sin regrabar "
+             "el USB. Necesita Wi-Fi. Tus juegos y partidas no se tocan.")
+    button = "Actualizar"
+    ROLLBACK = "/var/lib/aurora/update/rollback.tar.zst"
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.mode = "apply"
+        self.available = None  # None = consultando; "" = sin conexión
+        self.check = Task(self._check)
+
+    @property
+    def help(self):
+        if os.path.exists(self.ROLLBACK):
+            return (("A", "Actualizar"), ("X", "Versión anterior"), ("B", "Volver"))
+        return (("A", "Actualizar"), ("B", "Volver"))
+
+    def _check(self, _task):
+        ok, out = run_cmd(["aurora-update", "check"], timeout=30)
+        for line in out.splitlines():
+            if line.startswith("Disponible:"):
+                self.available = line.split(":", 1)[1].strip()
+                return True
+        self.available = ""
+        return False
+
+    @staticmethod
+    def installed():
+        try:
+            with open("/etc/aurora/version") as f:
+                return f.read().strip() or "desconocida"
+        except OSError:
+            return "desconocida"
+
+    def command(self):
+        return ["sudo", "-n", "aurora-update", self.mode]
+
+    def info_lines(self):
+        installed = self.installed()
+        lines = [("Instalada:", installed, TEXT)]
+        if self.available is None:
+            lines.append(("Disponible:", "consultando…", TEXT_DIM))
+        elif not self.available:
+            lines.append(("Disponible:", "sin conexión", WARN))
+        elif self.available == installed:
+            lines.append(("Disponible:", f"{self.available} (ya la tenés)", OK))
+        else:
+            lines.append(("Disponible:", f"{self.available} (nueva)", OK))
+        return lines
+
+    def handle(self, action):
+        busy = self.task and not self.task.done
+        if action == "a" and not busy:
+            self.mode = "apply"
+        elif action == "x" and not busy and os.path.exists(self.ROLLBACK):
+            self.app.push(Message(self.app, "¿Volver a la versión anterior?",
+                                  "Deshace la última actualización de Aurora.",
+                                  (("Volver a la anterior", self.rollback), ("Cancelar", None))))
+            return
+        super().handle(action)
+
+    def rollback(self):
+        self.mode = "rollback"
+        self.finished = None
+        self.task = Task(lambda t: t.stream(self.command()))
+
+    def on_finish(self, ok):
+        changed = any(line.startswith(("Aurora actualizado a", "Se volvió de")) for line in self.task.lines)
+        if ok and changed:
+            self.app.push(Message(self.app, "Aurora actualizado",
+                                  "La interfaz se va a reabrir para usar la versión nueva.",
+                                  (("Reabrir ahora", self.app.restart_frontend),)))
+
+
 class HardwareView(View):
     title, accent, glyph = "Hardware", (0, 172, 193), "info"
     help = (("A", "Guardar reporte completo"), ("B", "Volver"))
@@ -1018,7 +1094,7 @@ def get_battery():
 
 
 VIEWS = {"wifi": WifiView, "power": PowerView, "proton": ProtonView, "scan": ScanView, "hardware": HardwareView,
-         "quickmenu": QuickMenuView}
+         "update": UpdateView, "quickmenu": QuickMenuView}
 
 
 # --- Aplicación -----------------------------------------------------------------

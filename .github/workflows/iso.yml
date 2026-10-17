@@ -73,11 +73,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
-          docker run --rm --privileged -v "$PWD:/repo" -e OUT_DIR=/repo/out -e GITHUB_TOKEN \
+          AURORA_VERSION="$(date -u +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}"
+          export AURORA_VERSION
+          docker run --rm --privileged -v "$PWD:/repo" -e OUT_DIR=/repo/out -e GITHUB_TOKEN -e AURORA_VERSION \
             archlinux:latest bash -c '/repo/iso/build.sh && { /repo/iso/preview.sh || echo "Las capturas fallaron (no bloquea el ISO)"; }' \
             2>&1 | tee build.log
           sudo chown -R "$(id -u):$(id -g)" out
-          cd out && sha256sum ./*.iso > SHA256SUMS && ls -lh
+          cd out && sha256sum ./*.iso ./aurora-update.tar.zst > SHA256SUMS && ls -lh
 
       - name: Resumen del error de construcción
         if: failure()
@@ -165,4 +167,4 @@ jobs:
           for asset in $(gh release view dev --json assets --jq '.assets[].name'); do
             gh release delete-asset dev "$asset" -y
           done
-          gh release upload dev out/*.iso out/SHA256SUMS --clobber
+          gh release upload dev out/*.iso out/SHA256SUMS out/aurora-update.json out/aurora-update.tar.zst out/aurora-update --clobber
