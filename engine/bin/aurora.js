@@ -2,6 +2,9 @@
 'use strict';
 
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { loadSystemConfig, resolveConfig } = require('../src/config');
 const { detectGame } = require('../src/detect');
 const { exportEsde, readRomFile } = require('../src/esde');
@@ -36,22 +39,41 @@ function parseArgs(argv) {
 
 const print = (obj) => console.log(JSON.stringify(obj, null, 2));
 
-function launch(system, id) {
+// Cada juego deja la salida de su última ejecución en
+// ~/.local/state/aurora/games/<id>.log (lo junta aurora-logs).
+function openGameLog(id) {
+  const dir = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'aurora', 'games');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return fs.openSync(path.join(dir, `${id}.log`), 'w');
+  } catch {
+    return null;
+  }
+}
+
+function launch(system, id, { logToFile = false } = {}) {
   const game = getGame(system.gamesDir, id);
+  const fd = logToFile ? openGameLog(game.id) : null;
+  const log = (line) => (fd === null ? console.error(line) : fs.writeSync(fd, `${line}\n`));
   const { config } = resolveConfig(game, system);
   const plan = buildPlan(game, config, system);
-  for (const action of applyWrappers(plan)) console.error(`[aurora] ${action}`);
+  log(`[aurora] ${new Date().toISOString()} ${game.name}: ${game.exe}`);
+  for (const action of applyWrappers(plan)) log(`[aurora] ${action}`);
+  log(`[aurora] ${[plan.command, ...plan.args].join(' ')}`);
 
   const child = spawn(plan.command, plan.args, {
     cwd: plan.cwd,
     env: { ...process.env, ...plan.env },
-    stdio: 'inherit',
+    stdio: fd === null ? 'inherit' : ['inherit', fd, fd],
   });
   child.on('error', (err) => {
-    console.error(`[aurora] no se pudo ejecutar ${plan.command}: ${err.message}`);
+    log(`[aurora] no se pudo ejecutar ${plan.command}: ${err.message}`);
     process.exit(127);
   });
-  child.on('exit', (code, signal) => process.exit(signal ? 1 : code ?? 0));
+  child.on('exit', (code, signal) => {
+    log(`[aurora] terminó: ${signal ? `señal ${signal}` : `código ${code}`}`);
+    process.exit(signal ? 1 : code ?? 0);
+  });
 }
 
 function reportExport(result) {
@@ -96,7 +118,7 @@ function main() {
       return launch(system, positional[0] || '');
     case 'launch-rom':
       if (!positional[0]) throw new Error('Falta el archivo .aurora');
-      return launch(system, readRomFile(positional[0]));
+      return launch(system, readRomFile(positional[0]), { logToFile: true });
     case 'export-esde':
       return reportExport(exportEsde(system));
     case 'power':

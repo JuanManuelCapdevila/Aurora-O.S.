@@ -21,7 +21,13 @@ while read -r line; do
   [[ "$(field "$line" TYPE)" == "part" && -n "$fstype" && -z "$(field "$line" MOUNTPOINT)" ]] || continue
   [[ "$(field "$line" RM)" == "1" || "$(field "$line" HOTPLUG)" == "1" || "$name" == /dev/mmcblk* ]] || continue
   [[ "$fstype" == "iso9660" || "$fstype" == "swap" ]] && continue
-  udisksctl mount --no-user-interaction -b "$name" >/dev/null 2>&1 && echo "  montado $name"
+  if err="$(udisksctl mount --no-user-interaction -b "$name" 2>&1)"; then
+    echo "  montado $name ($fstype)"
+  else
+    echo "  no se pudo montar $name ($fstype): ${err##*: }"
+    # NTFS que Windows dejó "sucio" (sin quitar el USB de forma segura).
+    [[ "$fstype" == "ntfs" ]] && echo "  Conectalo en Windows, quitalo con \"Expulsar\" y volvé a probar."
+  fi
 done < <(lsblk -Ppno NAME,TYPE,RM,HOTPLUG,FSTYPE,MOUNTPOINT)
 
 # La carpeta puede llamarse Juegos, juegos o JUEGOS. (nocaseglob no sirve: bash

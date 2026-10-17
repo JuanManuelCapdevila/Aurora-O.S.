@@ -16,6 +16,13 @@ section() { printf '\n===== %s =====\n' "$1"; }
   section "Sesión (aurora-session)"
   tail -n 120 /home/*/.local/state/aurora/session.log 2>/dev/null || echo "(sin log de sesión)"
 
+  section "Juegos (última ejecución de cada uno)"
+  for f in /home/*/.local/state/aurora/games/*.log; do
+    [[ -e "$f" ]] || { echo "(ningún juego ejecutado)"; break; }
+    echo "--- $f"
+    tail -n 60 "$f"
+  done
+
   section "greetd"
   journalctl -b -u greetd --no-pager 2>/dev/null | tail -n 60
 
