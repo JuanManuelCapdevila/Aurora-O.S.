@@ -62,6 +62,34 @@ function writeEsSystems(system) {
   return { file, written: true };
 }
 
+function escapeXml(text) {
+  return String(text).replace(/[<>&"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+// Lista de Ajustes para ES-DE: nombre, descripción y orden de cada entrada de
+// tools.json. nogamecount las saca del contador de juegos y de las colecciones
+// Todos/Favoritos/Recientes. Se reescribe siempre: estas entradas son de Aurora.
+function writeToolsGamelist(system) {
+  const manifest = path.join(system.toolsDir || '', 'tools.json');
+  if (!system.toolsDir || !fs.existsSync(manifest)) return null;
+  const { tools } = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  const games = tools
+    .filter((t) => fs.existsSync(path.join(system.toolsDir, `${t.file}.sh`)))
+    .map(
+      (t, i) => `  <game>
+    <path>./${escapeXml(t.file)}.sh</path>
+    <name>${escapeXml(t.name)}</name>
+    <sortname>${String(i + 1).padStart(2, '0')} ${escapeXml(t.name)}</sortname>
+    <desc>${escapeXml(t.desc || '')}</desc>
+    <nogamecount>true</nogamecount>
+  </game>`,
+    );
+  const file = path.join(system.esdeDir, 'gamelists', 'aurora', 'gamelist.xml');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `<?xml version="1.0"?>\n<gameList>\n${games.join('\n')}\n</gameList>\n`);
+  return file;
+}
+
 // Enlaza el tema y los íconos de las herramientas dentro de ~/ES-DE y deja la
 // configuración inicial si el usuario todavía no tiene una. Nunca pisa archivos
 // del usuario: solo crea lo que falta.
@@ -124,7 +152,14 @@ function exportEsde(system) {
     created.push(entry);
   }
 
-  return { romDir, systems: writeEsSystems(system), assets: installEsdeAssets(system), created, removed };
+  return {
+    romDir,
+    systems: writeEsSystems(system),
+    tools: writeToolsGamelist(system),
+    assets: installEsdeAssets(system),
+    created,
+    removed,
+  };
 }
 
 function readRomFile(file) {

@@ -24,9 +24,12 @@ while read -r line; do
   udisksctl mount --no-user-interaction -b "$name" >/dev/null 2>&1 && echo "  montado $name"
 done < <(lsblk -Ppno NAME,TYPE,RM,HOTPLUG,FSTYPE,MOUNTPOINT)
 
-shopt -s nullglob nocaseglob
-dirs=(/run/media/"$(id -un)"/*/juegos/*/ "$HOME"/juegos/*/)
-shopt -u nocaseglob
+# La carpeta puede llamarse Juegos, juegos o JUEGOS. (nocaseglob no sirve: bash
+# solo ignora mayúsculas en las partes del patrón que tienen comodines.)
+shopt -s nullglob
+JUEGOS='[Jj][Uu][Ee][Gg][Oo][Ss]'
+# shellcheck disable=SC2206  # el patrón tiene que expandirse como glob
+dirs=(/run/media/"$(id -un)"/*/$JUEGOS/*/ "$HOME"/$JUEGOS/*/)
 
 if ((${#dirs[@]} == 0)); then
   echo
@@ -44,15 +47,17 @@ for dir in "${dirs[@]}"; do
   if out="$(aurora add "$dir" --if-new 2>&1)"; then
     case "$out" in
       "Ya registrado"*) ;;
-      *) added=$((added + 1)); echo; echo "$out" | head -n 3 ;;
+      *) added=$((added + 1)); echo "Agregado: $(basename "$dir")" ;;
     esac
   else
     failed=$((failed + 1))
-    echo; echo "No se pudo agregar $dir:"; echo "  $out"
+    echo "No se pudo agregar $(basename "$dir"): ${out#aurora: }"
   fi
 done
 
-echo
 echo "Juegos nuevos: $added · Con errores: $failed · Revisados: ${#dirs[@]}"
-((added > 0)) && echo "Para verlos en ES-DE: Menú → Utilities → Rescan ROM directory."
+((added > 0)) && echo "Para verlos en el menú hay que recargar la interfaz."
 pause "${1:-}"
+
+# Éxito si no hubo errores al agregar (sin juegos nuevos también es éxito).
+((failed == 0))

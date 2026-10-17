@@ -1,15 +1,11 @@
-"""Tests de las funciones puras de aurora-wifi (sin NetworkManager ni curses)."""
+"""Tests de las funciones puras de aurora_nm (sin NetworkManager)."""
 
-import importlib.machinery
-import importlib.util
 import pathlib
+import sys
 import unittest
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-loader = importlib.machinery.SourceFileLoader("aurora_wifi", str(ROOT / "rootfs/usr/local/bin/aurora-wifi"))
-spec = importlib.util.spec_from_loader("aurora_wifi", loader)
-wifi = importlib.util.module_from_spec(spec)
-loader.exec_module(wifi)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "rootfs/usr/lib/aurora/python"))
+import aurora_nm as wifi  # noqa: E402
 
 
 class SplitTerse(unittest.TestCase):
@@ -46,10 +42,8 @@ class ParseNetworks(unittest.TestCase):
 
 
 class Helpers(unittest.TestCase):
-    def test_barras_de_señal(self):
-        self.assertEqual(wifi.signal_bars(10), "····")
-        self.assertEqual(wifi.signal_bars(72), "▂▄▆·")
-        self.assertEqual(wifi.signal_bars(95), "▂▄▆█")
+    def test_nivel_de_señal(self):
+        self.assertEqual([wifi.signal_level(s) for s in (10, 30, 50, 72, 95)], [0, 1, 2, 3, 4])
 
     def test_errores_amigables(self):
         msg = "Error: Connection activation failed: Secrets were required, but not provided."

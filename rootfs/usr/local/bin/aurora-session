@@ -17,24 +17,37 @@ mkdir -p "$LOG_DIR"
 exec >>"$LOG_DIR/session.log" 2>&1
 echo "=== $(date '+%F %T') inicio de sesión"
 
-# TDP inicial; si ryzenadj no está disponible la sesión arranca igual.
-aurora power "${AURORA_POWER_MODE:-balanced}" || true
+# TDP: el último modo elegido en Ajustes → Energía (o equilibrado). Si ryzenadj
+# no está disponible la sesión arranca igual.
+POWER_MODE="$(cat "$HOME/.config/aurora/power-mode" 2>/dev/null || true)"
+aurora power "${POWER_MODE:-balanced}" || true
 
 # Mantiene la lista de juegos de ES-DE al día con la biblioteca.
 aurora export-esde || true
 
-# -s permite cambiar de terminal virtual (Ctrl+Alt+F2) para mantenimiento.
-start=$(date +%s)
-cage -s -- sh -c 'aurora-display apply; exec es-de'
-status=$?
+# Ajustes → Buscar juegos deja este archivo para pedir que ES-DE se reabra y
+# lea los juegos nuevos.
+RESTART_FLAG="$LOG_DIR/restart-frontend"
 
-# Si falló enseguida (ej. una máquina virtual sin aceleración 3D), se reintenta
-# con el renderizado por software de wlroots.
-if [ "$status" -ne 0 ] && [ $(($(date +%s) - start)) -lt 15 ]; then
-  echo "=== cage/ES-DE terminó con $status: reintento con WLR_RENDERER=pixman"
-  WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 cage -s -- sh -c 'aurora-display apply; exec es-de'
+while :; do
+  rm -f "$RESTART_FLAG"
+  # -s permite cambiar de terminal virtual (Ctrl+Alt+F2) para mantenimiento.
+  start=$(date +%s)
+  cage -s -- sh -c 'aurora-display apply; exec es-de'
   status=$?
-fi
+
+  # Si falló enseguida (ej. una máquina virtual sin aceleración 3D), se reintenta
+  # con el renderizado por software de wlroots.
+  if [ "$status" -ne 0 ] && [ $(($(date +%s) - start)) -lt 15 ]; then
+    echo "=== cage/ES-DE terminó con $status: reintento con WLR_RENDERER=pixman"
+    WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 cage -s -- sh -c 'aurora-display apply; exec es-de'
+    status=$?
+  fi
+
+  [ -e "$RESTART_FLAG" ] || break
+  echo "=== $(date '+%F %T') reabriendo ES-DE (juegos nuevos)"
+  aurora export-esde || true
+done
 
 echo "=== $(date '+%F %T') fin de sesión ($status)"
 exit "$status"

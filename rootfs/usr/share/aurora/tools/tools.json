@@ -1,0 +1,12 @@
+{
+  "_comment": "Entradas de Ajustes en ES-DE, en este orden. 'file' es el script de esta carpeta (sin .sh). Todas llevan nogamecount: no se cuentan como juegos ni aparecen en Todos/Favoritos/Recientes.",
+  "tools": [
+    { "file": "Wi-Fi", "name": "Wi-Fi", "desc": "Buscar redes y conectarse." },
+    { "file": "Energía", "name": "Energía", "desc": "Modo batería, equilibrado o rendimiento." },
+    { "file": "Proton", "name": "Proton", "desc": "Descargar o actualizar Proton para los juegos de Windows." },
+    { "file": "Buscar juegos", "name": "Buscar juegos", "desc": "Agregar los juegos de la carpeta Juegos de la microSD o un USB." },
+    { "file": "Hardware", "name": "Hardware", "desc": "Resumen del hardware de la consola." },
+    { "file": "Instalar Aurora", "name": "Instalar Aurora", "desc": "Instalar en la microSD o el SSD (borra el disco elegido)." },
+    { "file": "Terminal", "name": "Terminal", "desc": "Consola de comandos (avanzado)." }
+  ]
+}

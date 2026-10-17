@@ -103,3 +103,26 @@ test('export-esde funciona sin recursos del tema instalados', () => {
   system.esdeAssetsDir = path.join(root, 'no-existe');
   assert.deepEqual(exportEsde(system).assets.installed, []);
 });
+
+test('export-esde escribe la lista de Ajustes ordenada y fuera del contador de juegos', () => {
+  const { root, system } = setup();
+  system.toolsDir = path.join(root, 'tools');
+  writeFile(path.join(system.toolsDir, 'Wi-Fi.sh'), '#!/bin/sh');
+  writeFile(path.join(system.toolsDir, 'Energía.sh'), '#!/bin/sh');
+  writeFile(
+    path.join(system.toolsDir, 'tools.json'),
+    JSON.stringify({
+      tools: [
+        { file: 'Wi-Fi', name: 'Wi-Fi', desc: 'Redes & más' },
+        { file: 'Energía', name: 'Energía', desc: 'Modos' },
+        { file: 'No existe', name: 'Fantasma' },
+      ],
+    }),
+  );
+  const { tools } = exportEsde(system);
+  const xml = fs.readFileSync(tools, 'utf8');
+  assert.equal((xml.match(/<nogamecount>true<\/nogamecount>/g) || []).length, 2);
+  assert.match(xml, /<sortname>01 Wi-Fi<\/sortname>[\s\S]*<sortname>02 Energía<\/sortname>/);
+  assert.match(xml, /Redes &#38; más/);
+  assert.doesNotMatch(xml, /Fantasma/);
+});

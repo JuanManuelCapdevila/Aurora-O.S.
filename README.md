@@ -48,12 +48,14 @@ la última versión de la rama principal en el pre-release
    Ventoy o `dd`.
 2. En la Win600: **desactivar Secure Boot** en el BIOS y arrancar desde el USB (con un hub USB-C).
 3. Arranca en modo **live**: ES-DE directo, sin tocar el SSD ni Windows. Los cambios se pierden al apagar.
-4. En **Aurora: Herramientas** (dentro de ES-DE):
-   - *Configurar Wi-Fi* (necesita teclado USB o Bluetooth para la contraseña).
-   - *Descargar Proton*: baja Proton-GE y el runtime (~1,5 GB) y verifica que arranca.
-   - *Buscar juegos (microSD y USB)*: registra cada carpeta dentro de `Juegos/` en la raíz de la tarjeta o el USB.
-   - *Reporte de hardware*: lo que hace falta para ajustar la imagen a la consola.
-   - *Instalar Aurora en un disco*: en la **microSD** (Windows queda intacto) o en el SSD interno (lo borra).
+4. En **Ajustes** (pantalla de inicio) están las vistas gráficas, manejables con el control:
+   - *Wi-Fi*: busca redes y pide la clave con un teclado en pantalla.
+   - *Energía*: modo batería, equilibrado o rendimiento (se recuerda entre reinicios).
+   - *Proton*: lo descarga o actualiza (~1,5 GB) para los juegos de Windows.
+   - *Buscar juegos*: registra cada carpeta dentro de `Juegos/` en la raíz de la microSD o un USB.
+   - *Hardware*: resumen del hardware de la consola.
+   - *Instalar Aurora*: en la **microSD** (Windows queda intacto) o en el SSD interno (lo borra).
+   Las entradas de Ajustes no cuentan como juegos ni aparecen en *Todos*.
 
 Para construir el ISO localmente (necesita Docker):
 

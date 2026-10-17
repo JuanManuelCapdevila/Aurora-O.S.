@@ -1,0 +1,962 @@
+#!/usr/bin/env python3
+"""Ajustes de Aurora: vistas gráficas (pygame) con el estilo del menú.
+
+Uso: aurora-settings wifi | power | proton | scan | hardware
+
+Se maneja con el control (cruceta/stick, A, B, X, Y) o con teclado (flechas,
+Enter, Esc, Retroceso, Tab). Los recursos (fondo, fuentes, íconos) salen del
+tema de ES-DE generado por theme/build.mjs.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+import pygame  # noqa: E402
+
+sys.path.insert(0, os.environ.get("AURORA_PYTHON", "/usr/lib/aurora/python"))
+import aurora_nm as nm  # noqa: E402
+
+ASSETS = os.environ.get("AURORA_ASSETS", "/usr/share/aurora/es-de")
+THEME = os.path.join(ASSETS, "themes", "aurora-material")
+ICONS = os.path.join(ASSETS, "settings", "icons")
+CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".config", "aurora")
+W, H = 1280, 720
+
+# Paleta Material clásica (oscura).
+BG_DIM = (10, 14, 18, 150)
+CARD = (38, 50, 56, 235)
+CARD_HI = (55, 71, 79, 245)
+TEXT = (255, 255, 255)
+TEXT_DIM = (176, 190, 197)
+OK = (102, 187, 106)
+WARN = (255, 183, 77)
+ERR = (239, 83, 80)
+BUTTON_COLORS = {"A": (76, 175, 80), "B": (229, 57, 53), "X": (30, 136, 229), "Y": (253, 216, 53)}
+
+
+# --- Recursos -------------------------------------------------------------------
+
+_fonts = {}
+_icons = {}
+
+
+def font(size, medium=False):
+    key = (size, medium)
+    if key not in _fonts:
+        path = os.path.join(THEME, "fonts", "Roboto-Medium.ttf" if medium else "Roboto-Regular.ttf")
+        _fonts[key] = pygame.font.Font(path if os.path.exists(path) else None, size)
+    return _fonts[key]
+
+
+def icon(name, size, color=TEXT):
+    key = (name, size, color)
+    if key not in _icons:
+        path = os.path.join(ICONS, f"{name}.png")
+        if not os.path.exists(path):
+            _icons[key] = None
+        else:
+            img = pygame.transform.smoothscale(pygame.image.load(path).convert_alpha(), (size, size))
+            img.fill((*color, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            _icons[key] = img
+    return _icons[key]
+
+
+def text(surf, msg, pos, size=24, color=TEXT, medium=False, anchor="topleft", max_width=None):
+    f = font(size, medium)
+    if max_width:
+        while msg and f.size(msg)[0] > max_width:
+            msg = msg[:-2] + "…" if len(msg) > 2 else ""
+    img = f.render(msg, True, color)
+    rect = img.get_rect(**{anchor: pos})
+    surf.blit(img, rect)
+    return rect
+
+
+def rounded(surf, color, rect, radius=14):
+    layer = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
+    pygame.draw.rect(layer, color, (0, 0, rect[2], rect[3]), border_radius=radius)
+    surf.blit(layer, (rect[0], rect[1]))
+
+
+def wrap(msg, size, width):
+    f = font(size)
+    lines = []
+    for paragraph in msg.split("\n"):
+        line = ""
+        for word in paragraph.split(" "):
+            candidate = f"{line} {word}".strip()
+            if f.size(candidate)[0] <= width:
+                line = candidate
+            else:
+                if line:
+                    lines.append(line)
+                line = word
+        lines.append(line)
+    return lines
+
+
+def run_cmd(args, timeout=120):
+    try:
+        res = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        return res.returncode == 0, (res.stdout + res.stderr).strip()
+    except (OSError, subprocess.TimeoutExpired) as err:
+        return False, str(err)
+
+
+class Task:
+    """Corre algo en segundo plano para no congelar la pantalla."""
+
+    def __init__(self, fn):
+        self.done = False
+        self.result = None
+        self.lines = []
+        threading.Thread(target=self._run, args=(fn,), daemon=True).start()
+
+    def _run(self, fn):
+        try:
+            self.result = fn(self)
+        except Exception as err:  # noqa: BLE001 - se muestra al usuario
+            self.result = (False, str(err))
+        self.done = True
+
+    def stream(self, args):
+        """Ejecuta un comando guardando su salida línea a línea en self.lines."""
+        try:
+            proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        except OSError as err:
+            self.lines.append(str(err))
+            return False
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line:
+                self.lines.append(line)
+        return proc.wait() == 0
+
+
+# --- Entrada (control y teclado) ----------------------------------------------
+
+KEYMAP = {
+    pygame.K_UP: "up", pygame.K_DOWN: "down", pygame.K_LEFT: "left", pygame.K_RIGHT: "right",
+    pygame.K_RETURN: "a", pygame.K_KP_ENTER: "a", pygame.K_ESCAPE: "b",
+    pygame.K_BACKSPACE: "x", pygame.K_TAB: "y", pygame.K_PAGEUP: "lb", pygame.K_PAGEDOWN: "rb",
+}
+DIRECTIONS = ("up", "down", "left", "right")
+
+
+class Input:
+    REPEAT_DELAY, REPEAT_RATE = 0.35, 0.09
+
+    def __init__(self):
+        self.controllers = {}
+        self.joysticks = {}
+        self.held = {}  # dirección -> (próxima repetición)
+        self.axis = {}
+        try:
+            from pygame._sdl2 import controller
+
+            controller.init()
+            self.controller_mod = controller
+        except (ImportError, pygame.error):
+            self.controller_mod = None
+        pygame.joystick.init()
+        for i in range(pygame.joystick.get_count()):
+            self._open(i)
+
+    def _open(self, index):
+        if self.controller_mod and self.controller_mod.is_controller(index):
+            c = self.controller_mod.Controller(index)
+            self.controllers[c.as_joystick().get_instance_id()] = c
+        else:
+            j = pygame.joystick.Joystick(index)
+            self.joysticks[j.get_instance_id()] = j
+
+    def _press(self, out, action):
+        out.append(action)
+        if action in DIRECTIONS:
+            self.held[action] = time.monotonic() + self.REPEAT_DELAY
+
+    def _release(self, action):
+        self.held.pop(action, None)
+
+    def _axis(self, out, key, value, neg, pos):
+        direction = pos if value > 0.6 else neg if value < -0.6 else None
+        old = self.axis.get(key)
+        if direction != old:
+            if old:
+                self._release(old)
+            if direction:
+                self._press(out, direction)
+            self.axis[key] = direction
+
+    def process(self, event, out):
+        t = event.type
+        if t == pygame.KEYDOWN and event.key in KEYMAP:
+            self._press(out, KEYMAP[event.key])
+        elif t == pygame.KEYUP and event.key in KEYMAP:
+            self._release(KEYMAP[event.key])
+        elif t == pygame.TEXTINPUT:
+            out.append(("text", event.text))
+        elif t in (pygame.JOYDEVICEADDED, getattr(pygame, "CONTROLLERDEVICEADDED", -1)):
+            self._open(event.device_index)
+        elif t == getattr(pygame, "CONTROLLERBUTTONDOWN", -1) or t == getattr(pygame, "CONTROLLERBUTTONUP", -1):
+            names = {
+                pygame.CONTROLLER_BUTTON_A: "a", pygame.CONTROLLER_BUTTON_B: "b",
+                pygame.CONTROLLER_BUTTON_X: "x", pygame.CONTROLLER_BUTTON_Y: "y",
+                pygame.CONTROLLER_BUTTON_LEFTSHOULDER: "lb", pygame.CONTROLLER_BUTTON_RIGHTSHOULDER: "rb",
+                pygame.CONTROLLER_BUTTON_START: "a", pygame.CONTROLLER_BUTTON_BACK: "b",
+                pygame.CONTROLLER_BUTTON_DPAD_UP: "up", pygame.CONTROLLER_BUTTON_DPAD_DOWN: "down",
+                pygame.CONTROLLER_BUTTON_DPAD_LEFT: "left", pygame.CONTROLLER_BUTTON_DPAD_RIGHT: "right",
+            }
+            action = names.get(event.button)
+            if action:
+                if t == pygame.CONTROLLERBUTTONDOWN:
+                    self._press(out, action)
+                else:
+                    self._release(action)
+        elif t == getattr(pygame, "CONTROLLERAXISMOTION", -1):
+            value = event.value / 32767
+            if event.axis == pygame.CONTROLLER_AXIS_LEFTX:
+                self._axis(out, ("c", event.instance_id, "x"), value, "left", "right")
+            elif event.axis == pygame.CONTROLLER_AXIS_LEFTY:
+                self._axis(out, ("c", event.instance_id, "y"), value, "up", "down")
+        elif getattr(event, "instance_id", None) in self.controllers:
+            return  # el mismo control también manda eventos de joystick: se ignoran
+        elif t == pygame.JOYBUTTONDOWN or t == pygame.JOYBUTTONUP:
+            action = {0: "a", 1: "b", 2: "x", 3: "y", 4: "lb", 5: "rb", 6: "b", 7: "a"}.get(event.button)
+            if action:
+                (self._press(out, action) if t == pygame.JOYBUTTONDOWN else self._release(action))
+        elif t == pygame.JOYHATMOTION:
+            x, y = event.value
+            self._axis(out, ("h", event.instance_id, "x"), x, "left", "right")
+            self._axis(out, ("h", event.instance_id, "y"), -y, "up", "down")
+        elif t == pygame.JOYAXISMOTION and event.axis in (0, 1):
+            neg, pos = ("left", "right") if event.axis == 0 else ("up", "down")
+            self._axis(out, ("j", event.instance_id, event.axis), event.value, neg, pos)
+
+    def repeats(self, out):
+        now = time.monotonic()
+        for action, due in list(self.held.items()):
+            if now >= due:
+                out.append(action)
+                self.held[action] = now + self.REPEAT_RATE
+
+
+# --- Vistas --------------------------------------------------------------------
+
+
+class View:
+    title = ""
+    accent = (33, 150, 243)
+    glyph = None
+    help = (("A", "Elegir"), ("B", "Volver"))
+
+    def __init__(self, app):
+        self.app = app
+
+    def handle(self, action):
+        if action == "b":
+            self.app.pop()
+
+    def update(self):
+        pass
+
+    def draw(self, surf):
+        pass
+
+
+class Message(View):
+    """Diálogo con un mensaje y una o más opciones."""
+
+    def __init__(self, app, title, body, options=(("Aceptar", None),), accent=None):
+        super().__init__(app)
+        self.title_text, self.body, self.options, self.sel = title, body, list(options), 0
+        self.accent = accent or app.top_accent()
+        self.help = (("A", "Elegir"), ("B", "Cerrar"))
+        self.overlay = True
+
+    def handle(self, action):
+        if action == "up":
+            self.sel = (self.sel - 1) % len(self.options)
+        elif action == "down":
+            self.sel = (self.sel + 1) % len(self.options)
+        elif action == "b":
+            self.app.pop()
+        elif action == "a":
+            callback = self.options[self.sel][1]
+            self.app.pop()
+            if callback:
+                callback()
+
+    def draw(self, surf):
+        lines = wrap(self.body, 24, 620)
+        h = 120 + len(lines) * 32 + len(self.options) * 56
+        x, y = (W - 700) // 2, (H - h) // 2
+        rounded(surf, (0, 0, 0, 120), (0, 0, W, H), 0)
+        rounded(surf, CARD_HI, (x, y, 700, h), 18)
+        text(surf, self.title_text, (x + 40, y + 30), 30, medium=True)
+        for i, line in enumerate(lines):
+            text(surf, line, (x + 40, y + 84 + i * 32), 24, TEXT_DIM)
+        oy = y + 100 + len(lines) * 32
+        for i, (label, _) in enumerate(self.options):
+            selected = i == self.sel
+            if selected:
+                rounded(surf, (*self.accent, 255), (x + 30, oy + i * 56, 640, 48), 10)
+            text(surf, label, (x + 50, oy + i * 56 + 24), 24, medium=selected, anchor="midleft")
+
+
+class Busy(View):
+    """Pantalla de espera mientras corre una tarea; al terminar llama a done(result)."""
+
+    def __init__(self, app, msg, fn, done):
+        super().__init__(app)
+        self.msg, self.task, self.done = msg, Task(fn), done
+        self.help = ()
+        self.overlay = True
+        self.start = time.monotonic()
+
+    def handle(self, action):
+        pass
+
+    def update(self):
+        if self.task.done:
+            self.app.pop()
+            self.done(self.task.result)
+
+    def draw(self, surf):
+        rounded(surf, (0, 0, 0, 140), (0, 0, W, H), 0)
+        rounded(surf, CARD_HI, ((W - 600) // 2, H // 2 - 70, 600, 140), 18)
+        dots = "." * (int((time.monotonic() - self.start) * 3) % 4)
+        text(surf, self.msg + dots, (W // 2 - 260, H // 2), 28, medium=True, anchor="midleft")
+
+
+OSK_LAYOUTS = {
+    "abc": ["1234567890", "qwertyuiop", "asdfghjklñ", "zxcvbnm,.-"],
+    "ABC": ["1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM;:_"],
+    "#+=": ["!@#$%^&*()", "-_=+[]{}|\\", "'\";:/?<>,.", "`~€£¥¿¡°§"],
+}
+OSK_ACTIONS = ["Mayús", "#+=", "Espacio", "Borrar", "Mostrar", "Listo"]
+
+
+class Keyboard(View):
+    """Teclado en pantalla. on_done(texto) o on_done(None) si se cancela."""
+
+    help = (("A", "Escribir"), ("X", "Borrar"), ("Y", "Listo"), ("B", "Cancelar"))
+
+    def __init__(self, app, title, on_done, error=None, secret=True):
+        super().__init__(app)
+        self.title_text, self.on_done, self.error, self.secret = title, on_done, error, secret
+        self.value, self.layout, self.show = "", "abc", not secret
+        self.row, self.col = 1, 0
+        self.accent = app.top_accent()
+        pygame.key.start_text_input()
+
+    def grid(self):
+        return [list(r) for r in OSK_LAYOUTS[self.layout]] + [OSK_ACTIONS]
+
+    def finish(self, value):
+        pygame.key.stop_text_input()
+        self.app.pop()
+        self.on_done(value)
+
+    def handle(self, action):
+        grid = self.grid()
+        if isinstance(action, tuple):  # teclado físico
+            self.value += action[1]
+            return
+        if action == "up":
+            self.row = (self.row - 1) % len(grid)
+        elif action == "down":
+            self.row = (self.row + 1) % len(grid)
+        elif action == "left":
+            self.col = (self.col - 1) % len(grid[self.row])
+        elif action == "right":
+            self.col = (self.col + 1) % len(grid[self.row])
+        elif action == "x":
+            self.value = self.value[:-1]
+        elif action == "y":
+            self.finish(self.value)
+        elif action == "b":
+            self.finish(None)
+        elif action == "lb":
+            self.layout = "ABC" if self.layout == "abc" else "abc"
+        elif action == "a":
+            self.col = min(self.col, len(grid[self.row]) - 1)
+            key = grid[self.row][self.col]
+            if self.row < len(grid) - 1:
+                self.value += key
+                if self.layout == "ABC":
+                    self.layout = "abc"  # como en Android: mayúscula para una letra
+            elif key == "Mayús":
+                self.layout = "ABC" if self.layout == "abc" else "abc"
+            elif key == "#+=":
+                self.layout = "#+=" if self.layout != "#+=" else "abc"
+            elif key == "Espacio":
+                self.value += " "
+            elif key == "Borrar":
+                self.value = self.value[:-1]
+            elif key == "Mostrar":
+                self.show = not self.show
+            elif key == "Listo":
+                self.finish(self.value)
+        self.col = min(self.col, len(self.grid()[self.row]) - 1)
+
+    def draw(self, surf):
+        rounded(surf, CARD, (90, 70, W - 180, 560), 18)
+        text(surf, self.title_text, (130, 100), 30, medium=True, max_width=W - 260)
+        if self.error:
+            text(surf, self.error, (130, 142), 22, ERR)
+        rounded(surf, (20, 28, 33, 255), (130, 180, W - 260, 64), 12)
+        shown = self.value if self.show else "•" * len(self.value)
+        text(surf, shown + "|", (150, 212), 30, anchor="midleft", max_width=W - 300)
+        grid = self.grid()
+        y = 270
+        for r, keys in enumerate(grid):
+            if r < len(grid) - 1:
+                kw, gap = 76, 10
+                x = (W - (len(keys) * (kw + gap) - gap)) // 2
+                for c, key in enumerate(keys):
+                    selected = (r, c) == (self.row, self.col)
+                    rounded(surf, (*self.accent, 255) if selected else CARD_HI, (x, y, kw, 54), 10)
+                    text(surf, key, (x + kw // 2, y + 27), 26, medium=selected, anchor="center")
+                    x += kw + gap
+            else:
+                widths = [130, 110, 220, 130, 140, 130]
+                gap = 12
+                x = (W - (sum(widths) + gap * (len(widths) - 1))) // 2
+                for c, key in enumerate(keys):
+                    selected = (r, c) == (self.row, self.col)
+                    active = (key == "Mayús" and self.layout == "ABC") or (key == "#+=" and self.layout == "#+=")
+                    color = (*self.accent, 255) if selected else (69, 90, 100, 255) if active else CARD_HI
+                    rounded(surf, color, (x, y, widths[c], 54), 10)
+                    label = ("Ocultar" if self.show else "Mostrar") if key == "Mostrar" else key
+                    text(surf, label, (x + widths[c] // 2, y + 27), 22, medium=selected, anchor="center")
+                    x += widths[c] + gap
+            y += 66
+
+
+class ListView(View):
+    """Lista vertical de filas seleccionables con desplazamiento."""
+
+    row_h = 64
+    top, bottom = 150, 640
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.sel = 0
+
+    def items(self):
+        return []
+
+    def move(self, action):
+        n = len(self.items())
+        if not n:
+            return
+        if action == "up":
+            self.sel = max(0, self.sel - 1)
+        elif action == "down":
+            self.sel = min(n - 1, self.sel + 1)
+        elif action == "lb":
+            self.sel = max(0, self.sel - 5)
+        elif action == "rb":
+            self.sel = min(n - 1, self.sel + 5)
+
+    def visible(self):
+        items = self.items()
+        rows = (self.bottom - self.top) // self.row_h
+        start = max(0, min(self.sel - rows // 2, len(items) - rows))
+        return start, items[start : start + rows]
+
+
+class WifiView(ListView):
+    title, accent, glyph = "Wi-Fi", (33, 150, 243), "wifi"
+    help = (("A", "Conectar"), ("X", "Opciones"), ("Y", "Buscar"), ("B", "Volver"))
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.networks, self.known, self.status, self.scanning = [], set(), None, False
+        self.refresh()
+
+    def items(self):
+        return self.networks
+
+    def refresh(self):
+        if self.scanning:
+            return
+        self.scanning = True
+
+        def work(_task):
+            status = nm.wifi_device()
+            if status is None:
+                return None
+            ok, radio = nm.nmcli("radio", "wifi")
+            if ok and radio == "disabled":
+                nm.nmcli("radio", "wifi", "on")
+            return status, nm.scan(), nm.known_connections()
+
+        self.task = Task(work)
+
+    def update(self):
+        if self.scanning and self.task.done:
+            self.scanning = False
+            if self.task.result is None:
+                self.status = None
+                self.app.push(Message(self.app, "Sin Wi-Fi", "No se encontró una placa Wi-Fi. Revisá Hardware.", ((
+                    "Volver", self.app.pop),)))
+                return
+            self.status, self.networks, self.known = self.task.result
+            self.sel = min(self.sel, max(0, len(self.networks) - 1))
+
+    def handle(self, action):
+        if action == "b":
+            self.app.pop()
+        elif action == "y":
+            self.refresh()
+        elif action in ("up", "down", "lb", "rb"):
+            self.move(action)
+        elif self.networks and not self.scanning:
+            net = self.networks[self.sel]
+            if action == "a":
+                self.join(net)
+            elif action == "x":
+                self.options(net)
+
+    def join(self, net, password=None, known=None):
+        if net["active"]:
+            self.app.push(Message(self.app, net["ssid"], "Ya estás conectado a esta red."))
+            return
+        known = net["ssid"] in self.known if known is None else known
+        if net["secure"] and not known and password is None:
+            self.ask_password(net)
+            return
+
+        def done(result):
+            ok, out = result
+            if ok:
+                self.app.toast(f"Conectado a «{net['ssid']}»", OK)
+                self.refresh()
+                return
+            error = nm.friendly_error(out)
+            if net["secure"] and error == "La contraseña es incorrecta.":
+                if known:
+                    nm.nmcli("connection", "delete", "id", net["ssid"])
+                self.ask_password(net, error)
+            else:
+                self.app.push(Message(self.app, "No se pudo conectar", error))
+                self.refresh()
+
+        self.app.push(Busy(self.app, f"Conectando a «{net['ssid']}»",
+                           lambda _t: nm.connect(net, password, known), done))
+
+    def ask_password(self, net, error=None):
+        def on_done(value):
+            if value is not None:
+                self.join(net, value, known=False)
+
+        self.app.push(Keyboard(self.app, f"Contraseña de «{net['ssid']}»", on_done, error))
+
+    def options(self, net):
+        opts = []
+        if net["active"] and self.status:
+            opts.append(("Desconectar", lambda: self.act(nm.nmcli, "device", "disconnect", self.status["device"])))
+        if net["ssid"] in self.known:
+            opts.append(("Olvidar esta red", lambda: self.act(nm.nmcli, "connection", "delete", "id", net["ssid"])))
+        if not opts:
+            self.app.push(Message(self.app, net["ssid"], "Esta red no está guardada."))
+            return
+        opts.append(("Cancelar", None))
+        self.app.push(Message(self.app, net["ssid"], "¿Qué querés hacer con esta red?", opts))
+
+    def act(self, fn, *args):
+        ok, out = fn(*args)
+        self.app.toast("Listo" if ok else nm.friendly_error(out), OK if ok else ERR)
+        self.refresh()
+
+    def draw(self, surf):
+        st = self.status
+        if st and st["state"].startswith("connected") and st["connection"]:
+            status, color = f"Conectado a «{st['connection']}»", OK
+        else:
+            status, color = "Sin conexión", TEXT_DIM
+        text(surf, status, (90, 100), 24, color, medium=True)
+        if self.scanning:
+            dots = "." * (int(time.monotonic() * 3) % 4)
+            text(surf, "Buscando redes" + dots, (W - 90, 100), 22, TEXT_DIM, anchor="topright")
+        start, rows = self.visible()
+        if not rows and not self.scanning:
+            text(surf, "No se encontraron redes. Y: buscar de nuevo.", (90, 170), 24, WARN)
+        for i, net in enumerate(rows):
+            idx = start + i
+            y = self.top + i * self.row_h
+            selected = idx == self.sel
+            rounded(surf, (*self.accent, 255) if selected else CARD, (80, y, W - 160, self.row_h - 8), 12)
+            self.draw_signal(surf, (110, y + 14), nm.signal_level(net["signal"]))
+            text(surf, net["ssid"], (170, y + 28), 26, medium=True, anchor="midleft", max_width=W - 560)
+            if net["secure"]:
+                lock = icon("lock", 26)
+                if lock:
+                    surf.blit(lock, (W - 380, y + 15))
+            tag = "Conectada" if net["active"] else "Guardada" if net["ssid"] in self.known else ""
+            if tag:
+                text(surf, tag, (W - 110, y + 28), 22, OK if net["active"] else TEXT_DIM, anchor="midright")
+
+    @staticmethod
+    def draw_signal(surf, pos, level):
+        x, y = pos
+        for b in range(4):
+            h = 8 + b * 7
+            color = TEXT if b < level else (255, 255, 255, 60)
+            rounded(surf, color if len(color) == 4 else (*color, 255), (x + b * 11, y + 30 - h, 8, h), 2)
+
+
+class PowerView(View):
+    title, accent, glyph = "Energía", (251, 140, 0), "battery"
+    help = (("A", "Aplicar"), ("B", "Volver"))
+    MODES = [
+        ("battery", "Batería", "battery", "Menos calor y más autonomía. Para juegos livianos."),
+        ("balanced", "Equilibrado", "tune", "El punto medio. Recomendado para la mayoría."),
+        ("performance", "Rendimiento", "flash", "Máxima potencia. Más calor y menos batería."),
+    ]
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.current = self.load_mode()
+        self.sel = [m[0] for m in self.MODES].index(self.current) if self.current in [m[0] for m in self.MODES] else 1
+        self.watts = self.load_watts()
+
+    @staticmethod
+    def load_mode():
+        try:
+            with open(os.path.join(CONFIG_DIR, "power-mode")) as f:
+                return f.read().strip() or "balanced"
+        except OSError:
+            return "balanced"
+
+    @staticmethod
+    def load_watts():
+        try:
+            with open("/etc/aurora/aurora.json") as f:
+                device = json.load(f).get("device", "win600-3050e")
+            with open(f"/opt/aurora/engine/profiles/device/{device}.json") as f:
+                modes = json.load(f)["power"]["modes"]
+            return {k: round(v["stapmLimit"] / 1000) for k, v in modes.items()}
+        except (OSError, KeyError, ValueError):
+            return {}
+
+    def handle(self, action):
+        if action == "b":
+            self.app.pop()
+        elif action == "left":
+            self.sel = max(0, self.sel - 1)
+        elif action == "right":
+            self.sel = min(len(self.MODES) - 1, self.sel + 1)
+        elif action == "a":
+            mode, label = self.MODES[self.sel][:2]
+
+            def done(result):
+                ok, out = result
+                if ok:
+                    os.makedirs(CONFIG_DIR, exist_ok=True)
+                    with open(os.path.join(CONFIG_DIR, "power-mode"), "w") as f:
+                        f.write(mode + "\n")
+                    self.current = mode
+                    self.app.toast(f"Modo {label} aplicado", OK)
+                else:
+                    self.app.push(Message(self.app, "No se pudo cambiar el modo",
+                                          "El control de energía (ryzenadj) no respondió.\n" + out[-200:]))
+
+            self.app.push(Busy(self.app, f"Aplicando modo {label}", lambda _t: run_cmd(["aurora", "power", mode]), done))
+
+    def draw(self, surf):
+        text(surf, "Elegí cuánta potencia puede usar la consola.", (90, 100), 24, TEXT_DIM)
+        cw, gap = 340, 40
+        x = (W - (3 * cw + 2 * gap)) // 2
+        for i, (mode, label, glyph, desc) in enumerate(self.MODES):
+            selected = i == self.sel
+            rect = (x + i * (cw + gap), 170, cw, 400)
+            rounded(surf, (*self.accent, 255) if selected else CARD, rect, 18)
+            img = icon(glyph, 96)
+            if img:
+                surf.blit(img, (rect[0] + (cw - 96) // 2, rect[1] + 50))
+            text(surf, label, (rect[0] + cw // 2, rect[1] + 190), 32, medium=True, anchor="center")
+            if mode in self.watts:
+                text(surf, f"{self.watts[mode]} W", (rect[0] + cw // 2, rect[1] + 232), 24, TEXT_DIM if not selected else TEXT, anchor="center")
+            for j, line in enumerate(wrap(desc, 21, cw - 50)):
+                text(surf, line, (rect[0] + cw // 2, rect[1] + 285 + j * 28), 21, TEXT if selected else TEXT_DIM, anchor="center")
+            if mode == self.current:
+                check = icon("check", 34, OK if not selected else TEXT)
+                if check:
+                    surf.blit(check, (rect[0] + cw - 54, rect[1] + 18))
+
+
+class TaskView(View):
+    """Vista con explicación, un botón de acción y la salida del comando."""
+
+    intro = ""
+    button = "Empezar"
+    help = (("A", "Empezar"), ("B", "Volver"))
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.task = None
+        self.finished = None
+
+    def command(self):
+        return []
+
+    def info_lines(self):
+        return []
+
+    def on_finish(self, ok):
+        pass
+
+    def handle(self, action):
+        if action == "b" and not (self.task and not self.task.done):
+            self.app.pop()
+        elif action == "a" and not (self.task and not self.task.done):
+            self.finished = None
+            self.task = Task(lambda t: t.stream(self.command()))
+
+    def update(self):
+        if self.task and self.task.done and self.finished is None:
+            self.finished = bool(self.task.result)
+            self.on_finish(self.finished)
+
+    def draw(self, surf):
+        y = 100
+        for line in wrap(self.intro, 24, W - 180):
+            text(surf, line, (90, y), 24, TEXT_DIM)
+            y += 32
+        for label, value, color in self.info_lines():
+            text(surf, label, (90, y + 12), 24, TEXT_DIM)
+            text(surf, value, (240, y + 12), 24, color, medium=True, max_width=W - 330)
+            y += 36
+        running = self.task and not self.task.done
+        label = "Trabajando…" if running else self.button
+        rounded(surf, (*self.accent, 255) if not running else CARD_HI, (90, y + 30, 420, 60), 12)
+        text(surf, label, (300, y + 60), 26, medium=True, anchor="center")
+        if self.task:
+            box_y = y + 120
+            rounded(surf, (20, 28, 33, 230), (90, box_y, W - 180, 610 - box_y), 12)
+            lines = self.task.lines[-((610 - box_y - 30) // 28):]
+            for i, line in enumerate(lines):
+                text(surf, line, (110, box_y + 16 + i * 28), 20, TEXT_DIM, max_width=W - 230)
+            if self.finished is not None:
+                msg, color = ("Terminado", OK) if self.finished else ("Terminó con errores", ERR)
+                text(surf, msg, (W - 110, y + 60), 24, color, medium=True, anchor="midright")
+
+
+class ProtonView(TaskView):
+    title, accent, glyph = "Proton", (156, 39, 176), "download"
+    intro = "Proton permite jugar los juegos de Windows. Se descarga una vez (~1,5 GB) y necesita Wi-Fi."
+    button = "Descargar / actualizar"
+    help = (("A", "Descargar"), ("B", "Volver"))
+
+    def command(self):
+        return ["aurora-prepare-proton", "--no-pause"]
+
+    def info_lines(self):
+        base = os.path.expanduser("~/.local/share/Steam/compatibilitytools.d")
+        try:
+            versions = sorted(d for d in os.listdir(base) if d.lower().startswith("ge-proton"))
+        except OSError:
+            versions = []
+        if versions:
+            return [("Instalado:", versions[-1], OK)]
+        return [("Instalado:", "todavía no", WARN)]
+
+
+class ScanView(TaskView):
+    title, accent, glyph = "Buscar juegos", (76, 175, 80), "search"
+    intro = ("Copiá cada juego en su propia carpeta dentro de una carpeta «Juegos» en la raíz de la "
+             "microSD o de un USB, conectala y elegí Buscar.")
+    button = "Buscar juegos"
+    help = (("A", "Buscar"), ("B", "Volver"))
+
+    def command(self):
+        return ["aurora-scan-games"]
+
+    def on_finish(self, ok):
+        if ok and any(line.startswith("Juegos nuevos:") and not line.startswith("Juegos nuevos: 0") for line in self.task.lines):
+            self.app.push(Message(self.app, "Juegos nuevos",
+                                  "Para verlos en el menú hay que recargar la interfaz (tarda unos segundos).",
+                                  (("Recargar ahora", self.app.restart_frontend), ("Más tarde", None))))
+
+
+class HardwareView(View):
+    title, accent, glyph = "Hardware", (0, 172, 193), "info"
+    help = (("A", "Guardar reporte completo"), ("B", "Volver"))
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.task = Task(lambda _t: run_cmd(["aurora-hw-report", "--summary"]))
+
+    def handle(self, action):
+        if action == "b":
+            self.app.pop()
+        elif action == "a":
+            path = os.path.expanduser("~/hw-report.txt")
+
+            def done(result):
+                self.app.toast(f"Guardado en {path}" if result[0] else "No se pudo guardar", OK if result[0] else ERR)
+
+            self.app.push(Busy(self.app, "Generando reporte", lambda _t: run_cmd(["aurora-hw-report", path]), done))
+
+    def draw(self, surf):
+        if not self.task.done:
+            text(surf, "Leyendo el hardware…", (90, 110), 26, TEXT_DIM)
+            return
+        ok, out = self.task.result
+        rounded(surf, CARD, (80, 100, W - 160, 520), 18)
+        if not ok:
+            for i, line in enumerate(wrap("No se pudo leer el hardware:\n" + out, 22, W - 240)[:12]):
+                text(surf, line, (120, 130 + i * 32), 22, ERR if i == 0 else TEXT_DIM)
+            return
+        y = 130
+        for line in out.splitlines():
+            if ":" not in line or line.startswith("("):
+                continue
+            label, value = line.split(":", 1)
+            text(surf, label.strip(), (120, y), 24, TEXT_DIM)
+            text(surf, value.strip(), (330, y), 24, medium=True, max_width=W - 440)
+            y += 40
+            if y > 590:
+                break
+
+
+VIEWS = {"wifi": WifiView, "power": PowerView, "proton": ProtonView, "scan": ScanView, "hardware": HardwareView}
+
+
+# --- Aplicación -----------------------------------------------------------------
+
+
+class App:
+    def __init__(self, view_name, screenshot=None):
+        pygame.init()
+        flags = 0 if os.environ.get("AURORA_WINDOWED") else pygame.FULLSCREEN
+        self.window = pygame.display.set_mode((0, 0) if flags else (W, H), flags)
+        pygame.display.set_caption("Aurora: Ajustes")
+        pygame.mouse.set_visible(False)
+        self.surf = pygame.Surface((W, H), pygame.SRCALPHA)
+        wp = os.path.join(THEME, "assets", "wallpaper.png")
+        self.wallpaper = pygame.transform.smoothscale(pygame.image.load(wp).convert(), (W, H)) if os.path.exists(wp) else None
+        self.input = Input()
+        self.stack = []
+        self.toast_msg = None
+        self.running = True
+        self.push(VIEWS[view_name](self))
+
+    def push(self, view):
+        self.stack.append(view)
+
+    def pop(self):
+        if self.stack:
+            self.stack.pop()
+        if not self.stack:
+            self.running = False
+
+    def top_accent(self):
+        for v in reversed(self.stack):
+            if not getattr(v, "overlay", False):
+                return v.accent
+        return (33, 150, 243)
+
+    def toast(self, msg, color=OK):
+        self.toast_msg = (msg, color, time.monotonic() + 2.5)
+
+    def restart_frontend(self):
+        """Pide a aurora-session que reabra ES-DE (para que lea los juegos nuevos)."""
+        state = os.path.expanduser("~/.local/state/aurora")
+        os.makedirs(state, exist_ok=True)
+        open(os.path.join(state, "restart-frontend"), "w").close()
+        subprocess.Popen(["sh", "-c", "sleep 1; pkill -TERM -x es-de"], start_new_session=True)
+        self.running = False
+
+    def draw_chrome(self, base):
+        s = self.surf
+        if self.wallpaper:
+            s.blit(self.wallpaper, (0, 0))
+        else:
+            s.fill((38, 50, 56))
+        rounded(s, BG_DIM, (0, 0, W, H), 0)
+        rounded(s, (0, 0, 0, 110), (0, 0, W, 50), 0)
+        x = 30
+        if base.glyph:
+            img = icon(base.glyph, 30)
+            if img:
+                s.blit(img, (x, 10))
+                x += 44
+        text(s, f"Ajustes · {base.title}", (x, 25), 24, medium=True, anchor="midleft")
+        text(s, time.strftime("%H:%M"), (W - 30, 25), 24, medium=True, anchor="midright")
+
+    def draw_help(self, view):
+        s = self.surf
+        items = view.help
+        x = W - 40
+        for button, label in reversed(items):
+            lw = font(20).size(label)[0]
+            x -= lw
+            text(s, label, (x, H - 34), 20, TEXT_DIM, anchor="midleft")
+            x -= 34
+            pygame.draw.circle(s, BUTTON_COLORS[button], (x + 13, H - 34), 13)
+            text(s, button, (x + 13, H - 34), 16, (20, 20, 20), medium=True, anchor="center")
+            x -= 26
+
+    def draw(self):
+        base = next((v for v in self.stack if not getattr(v, "overlay", False) and not isinstance(v, Keyboard)), self.stack[0])
+        page = next((v for v in reversed(self.stack) if not getattr(v, "overlay", False)), base)
+        self.draw_chrome(base)
+        page.draw(self.surf)
+        if self.stack[-1] is not page:
+            self.stack[-1].draw(self.surf)
+        self.draw_help(self.stack[-1])
+        if self.toast_msg and time.monotonic() < self.toast_msg[2]:
+            msg, color, _ = self.toast_msg
+            w = font(24, True).size(msg)[0] + 60
+            rounded(self.surf, (33, 33, 33, 240), ((W - w) // 2, H - 120, w, 54), 27)
+            text(self.surf, msg, (W // 2, H - 93), 24, color, medium=True, anchor="center")
+        ww, wh = self.window.get_size()
+        if (ww, wh) == (W, H):
+            self.window.blit(self.surf, (0, 0))
+        else:
+            self.window.blit(pygame.transform.smoothscale(self.surf, (ww, wh)), (0, 0))
+        pygame.display.flip()
+
+    def step(self, actions=()):
+        for action in actions:
+            if self.stack:
+                self.stack[-1].handle(action)
+        for view in list(self.stack):
+            view.update()
+        if self.stack:
+            self.draw()
+
+    def run(self):
+        clock = pygame.time.Clock()
+        while self.running and self.stack:
+            actions = []
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                self.input.process(event, actions)
+            self.input.repeats(actions)
+            self.step(actions)
+            clock.tick(30)
+        pygame.quit()
+
+
+def main():
+    view = sys.argv[1] if len(sys.argv) > 1 else "wifi"
+    if view not in VIEWS:
+        print(f"Uso: aurora-settings {' | '.join(VIEWS)}", file=sys.stderr)
+        return 1
+    App(view).run()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

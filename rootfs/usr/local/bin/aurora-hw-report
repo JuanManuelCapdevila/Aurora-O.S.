@@ -6,7 +6,12 @@
 
 set -uo pipefail
 
-OUT="${1:-hw-report-$(date +%Y%m%d-%H%M).txt}"
+# --summary: solo el resumen por la salida estándar (lo usa Ajustes → Hardware).
+if [[ "${1:-}" == "--summary" ]]; then
+  SUMMARY_ONLY=1
+else
+  OUT="${1:-hw-report-$(date +%Y%m%d-%H%M).txt}"
+fi
 
 section() { printf '\n===== %s =====\n' "$1"; }
 run() {
@@ -36,6 +41,11 @@ summary() {
   echo
   echo "(Detalle completo abajo: Espacio = página siguiente, b = anterior, q = salir)"
 }
+
+if [[ -n "${SUMMARY_ONLY:-}" ]]; then
+  summary
+  exit 0
+fi
 
 {
   summary

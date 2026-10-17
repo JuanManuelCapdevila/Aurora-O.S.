@@ -2,6 +2,7 @@
 // Genera los recursos de ES-DE de Aurora:
 //   <dest>/themes/aurora-material/   tema (XML + íconos + fondo + fuentes Roboto)
 //   <dest>/media/aurora/covers/      íconos de las herramientas ("apps")
+//   <dest>/settings/icons/           glifos sueltos para aurora-settings
 //   <dest>/es_settings.xml           configuración inicial de ES-DE
 //
 // Necesita rsvg-convert (librsvg) y la fuente Roboto instalada (fc-match).
@@ -91,6 +92,18 @@ if (missing.length) throw new Error(`Herramientas sin ícono en theme/icons.json
 fs.rmSync(coversDir, { recursive: true, force: true });
 for (const tool of tools) {
   render(iconSvg(spec.tools[tool]), path.join(coversDir, `${tool}.png`), 240, 240);
+}
+
+// Glifos sueltos (blancos, fondo transparente) para las vistas de aurora-settings.
+const glyphDir = path.join(dest, 'settings', 'icons');
+fs.rmSync(glyphDir, { recursive: true, force: true });
+for (const [name, d] of Object.entries(spec.glyphs)) {
+  render(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#ffffff" d="${d}"/></svg>`,
+    path.join(glyphDir, `${name}.png`),
+    96,
+    96,
+  );
 }
 
 fs.copyFileSync(path.join(HERE, 'es_settings.xml'), path.join(dest, 'es_settings.xml'));

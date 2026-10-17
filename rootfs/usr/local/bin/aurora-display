@@ -7,7 +7,7 @@
 #
 # Uso:
 #   aurora-display apply    aplica la rotación guardada (lo hace aurora-session)
-#   aurora-display rotate   gira 90° más, guarda y aplica (herramienta "Girar pantalla")
+#   aurora-display rotate   gira 90° más, guarda y aplica
 #   aurora-display set N    N = 0, 90, 180 o 270
 #
 # Configuración: /var/lib/aurora/display.conf (la del usuario) o, si no existe,

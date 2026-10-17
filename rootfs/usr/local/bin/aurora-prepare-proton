@@ -10,11 +10,14 @@ export PROTONPATH=GE-Proton
 export WINEPREFIX="$HOME/Games/.proton-check"
 
 echo "Descargando Proton-GE y el runtime (puede tardar varios minutos)..."
-if umu-run wineboot -u; then
+ok=0
+umu-run wineboot -u && ok=1
+if ((ok)); then
   echo
   echo "Proton listo."
 else
   echo
   echo "Falló la preparación de Proton. ¿Hay conexión a Internet?"
 fi
-read -rp $'\nPresioná Enter para volver...' _
+[[ "${1:-}" == "--no-pause" ]] || read -rp $'\nPresioná Enter para volver...' _
+((ok))
