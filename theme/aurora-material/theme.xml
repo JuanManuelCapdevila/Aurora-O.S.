@@ -85,6 +85,8 @@
                 <size>0.84 0.06</size>
                 <origin>0 0.5</origin>
                 <text>${system.fullName}</text>
+                <!-- Las colecciones de ES-DE vienen en minúsculas ("todos los juegos"). -->
+                <letterCase>capitalize</letterCase>
                 <fontPath>${fontMedium}</fontPath>
                 <fontSize>0.045</fontSize>
                 <color>${textColor}</color>
@@ -94,6 +96,8 @@
                 <pos>0.08 0.14</pos>
                 <size>0.84 0.68</size>
                 <imageType>cover</imageType>
+                <!-- En Todos/Favoritos/Recientes no agregar "[WINDOWS]" al nombre. -->
+                <systemNameSuffix>false</systemNameSuffix>
                 <itemSize>0.15 0.27</itemSize>
                 <!-- Juegos sin carátula: tarjeta redondeada con el nombre. -->
                 <textBackgroundColor>37474FE6</textBackgroundColor>
