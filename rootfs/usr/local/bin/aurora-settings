@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ajustes de Aurora: vistas gráficas (pygame) con el estilo del menú.
 
-Uso: aurora-settings wifi | power | proton | scan | hardware
+Uso: aurora-settings wifi | power | proton | scan | hardware | quickmenu
 
 Se maneja con el control (cruceta/stick, A, B, X, Y) o con teclado (flechas,
 Enter, Esc, Retroceso, Tab). Los recursos (fondo, fuentes, íconos) salen del
@@ -637,6 +637,12 @@ class PowerView(View):
             return "balanced"
 
     @staticmethod
+    def save_mode(mode):
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        with open(os.path.join(CONFIG_DIR, "power-mode"), "w") as f:
+            f.write(mode + "\n")
+
+    @staticmethod
     def load_watts():
         try:
             with open("/etc/aurora/aurora.json") as f:
@@ -660,9 +666,7 @@ class PowerView(View):
             def done(result):
                 ok, out = result
                 if ok:
-                    os.makedirs(CONFIG_DIR, exist_ok=True)
-                    with open(os.path.join(CONFIG_DIR, "power-mode"), "w") as f:
-                        f.write(mode + "\n")
+                    self.save_mode(mode)
                     self.current = mode
                     self.app.toast(f"Modo {label} aplicado", OK)
                 else:
@@ -828,7 +832,193 @@ class HardwareView(View):
                 break
 
 
-VIEWS = {"wifi": WifiView, "power": PowerView, "proton": ProtonView, "scan": ScanView, "hardware": HardwareView}
+class QuickMenuView(View):
+    """Menú rápido sobre un juego en pausa (lo abre aurora-hotkeys con Select + Start).
+
+    Sale con código 0 para volver al juego o EXIT_CLOSE para cerrarlo.
+    """
+
+    title, accent, glyph = "Menú rápido", (94, 53, 177), "gamepad"
+    header = "Menú rápido"
+    help = (("A", "Elegir"), ("B", "Volver al juego"))
+    EXIT_CLOSE = 10
+    ROWS = ("resume", "volume", "brightness", "power", "close")
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.game = os.environ.get("AURORA_GAME_NAME") or "Juego"
+        self.sel = 0
+        self.volume = get_volume()
+        self.backlight = get_brightness()
+        self.power = PowerView.load_mode()
+        self.power_busy = False
+
+    def handle(self, action):
+        row = self.ROWS[self.sel]
+        if action == "b":
+            self.app.pop()
+        elif action == "up":
+            self.sel = max(0, self.sel - 1)
+        elif action == "down":
+            self.sel = min(len(self.ROWS) - 1, self.sel + 1)
+        elif action in ("left", "right"):
+            step = 1 if action == "right" else -1
+            if row == "volume" and self.volume:
+                self.volume = change_volume(step * 5) or self.volume
+            elif row == "brightness" and self.backlight:
+                self.backlight = change_brightness(self.backlight, step * 10) or self.backlight
+            elif row == "power":
+                self.set_power(step)
+        elif action == "a":
+            if row == "resume":
+                self.app.pop()
+            elif row == "volume" and self.volume:
+                self.volume = toggle_mute() or self.volume
+            elif row == "close":
+                self.app.push(Message(self.app, f"¿Cerrar {self.game}?",
+                                      "Se pierde lo que no hayas guardado en el juego.",
+                                      (("Cerrar juego", self.close), ("Cancelar", None)), accent=ERR))
+
+    def close(self):
+        self.app.exit_code = self.EXIT_CLOSE
+        self.app.running = False
+
+    def set_power(self, step):
+        modes = [m[0] for m in PowerView.MODES]
+        current = modes.index(self.power) if self.power in modes else 1
+        new = min(len(modes) - 1, max(0, current + step))
+        if new == current or self.power_busy:
+            return
+        mode, label = PowerView.MODES[new][:2]
+        self.power, self.power_busy = mode, True
+
+        def apply():
+            ok, _ = run_cmd(["aurora", "power", mode], timeout=20)
+            if ok:
+                PowerView.save_mode(mode)
+                self.app.toast(f"Modo {label}", OK)
+            else:
+                self.app.toast("No se pudo cambiar el modo", ERR)
+            self.power_busy = False
+
+        threading.Thread(target=apply, daemon=True).start()
+
+    def row_value(self, row):
+        """(texto, nivel 0-1 o None) que se muestra a la derecha de cada fila."""
+        if row == "volume":
+            if not self.volume:
+                return "Sin audio", None
+            level, muted = self.volume
+            return ("Silencio" if muted else f"{round(level * 100)} %"), (0 if muted else level)
+        if row == "brightness":
+            if not self.backlight:
+                return "No disponible", None
+            _, value, maximum = self.backlight
+            return f"{round(value * 100 / maximum)} %", value / maximum
+        if row == "power":
+            return dict((m[0], m[1]) for m in PowerView.MODES).get(self.power, self.power), None
+        return "", None
+
+    def draw(self, surf):
+        labels = {
+            "resume": ("play", "Volver al juego"), "volume": ("volume", "Volumen"),
+            "brightness": ("brightness", "Brillo"), "power": ("battery", "Energía"),
+            "close": ("close", "Cerrar juego"),
+        }
+        x, w, row_h = (W - 820) // 2, 820, 76
+        text(surf, self.game, (W // 2, 100), 30, medium=True, anchor="center", max_width=w)
+        battery = get_battery()
+        if battery:
+            text(surf, battery, (W // 2, 138), 22, TEXT_DIM, anchor="center")
+        top = 180
+        for i, row in enumerate(self.ROWS):
+            selected = i == self.sel
+            y = top + i * (row_h + 12)
+            color = (*(ERR if row == "close" else self.accent), 255) if selected else CARD
+            rounded(surf, color, (x, y, w, row_h), 14)
+            glyph, label = labels[row]
+            img = icon(glyph, 36)
+            if img:
+                surf.blit(img, (x + 26, y + (row_h - 36) // 2))
+            text(surf, label, (x + 84, y + row_h // 2), 26, medium=selected, anchor="midleft")
+            value, level = self.row_value(row)
+            right = x + w - 30
+            if value:
+                arrows = row in ("volume", "brightness", "power") and selected
+                vr = text(surf, (f"‹   {value}   ›" if arrows else value), (right, y + row_h // 2), 22,
+                          TEXT if selected else TEXT_DIM, anchor="midright")
+                right = vr.left - 24
+            if level is not None:
+                bw = 200
+                rounded(surf, (255, 255, 255, 60), (right - bw, y + row_h // 2 - 4, bw, 8), 4)
+                rounded(surf, (255, 255, 255, 230), (right - bw, y + row_h // 2 - 4, max(8, int(bw * level)), 8), 4)
+
+
+def get_volume():
+    """(nivel 0-1, silenciado) de la salida de audio, o None si no hay PipeWire."""
+    ok, out = run_cmd(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], timeout=5)
+    parts = out.split()
+    if not ok or len(parts) < 2 or parts[0] != "Volume:":
+        return None
+    try:
+        return float(parts[1]), "[MUTED]" in parts
+    except ValueError:
+        return None
+
+
+def change_volume(percent):
+    sign = "+" if percent > 0 else "-"
+    run_cmd(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", f"{abs(percent)}%{sign}"], timeout=5)
+    return get_volume()
+
+
+def toggle_mute():
+    run_cmd(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"], timeout=5)
+    return get_volume()
+
+
+BACKLIGHT_DIR = os.environ.get("AURORA_BACKLIGHT", "/sys/class/backlight")
+
+
+def get_brightness():
+    """(dispositivo, valor, máximo) de la pantalla interna, o None."""
+    try:
+        name = sorted(os.listdir(BACKLIGHT_DIR))[0]
+        with open(os.path.join(BACKLIGHT_DIR, name, "brightness")) as f:
+            value = int(f.read())
+        with open(os.path.join(BACKLIGHT_DIR, name, "max_brightness")) as f:
+            maximum = int(f.read())
+        return (name, value, maximum) if maximum > 0 else None
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def change_brightness(current, percent):
+    """Cambia el brillo vía logind (no necesita root) sin bajar de 5 %."""
+    name, value, maximum = current
+    new = min(maximum, max(round(maximum * 0.05), value + round(maximum * percent / 100)))
+    run_cmd(["busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1/session/auto",
+             "org.freedesktop.login1.Session", "SetBrightness", "ssu", "backlight", name, str(new)], timeout=5)
+    return get_brightness()
+
+
+def get_battery():
+    base = "/sys/class/power_supply"
+    try:
+        for name in sorted(os.listdir(base)):
+            if name.startswith("BAT"):
+                with open(os.path.join(base, name, "capacity")) as f:
+                    capacity = f.read().strip()
+                with open(os.path.join(base, name, "status")) as f:
+                    charging = f.read().strip() == "Charging"
+                return f"Batería {capacity} %" + (" · cargando" if charging else "")
+    except OSError:
+        pass
+    return None
+
+
+VIEWS = {"wifi": WifiView, "power": PowerView, "proton": ProtonView, "scan": ScanView, "hardware": HardwareView,
+         "quickmenu": QuickMenuView}
 
 
 # --- Aplicación -----------------------------------------------------------------
@@ -848,6 +1038,7 @@ class App:
         self.stack = []
         self.toast_msg = None
         self.running = True
+        self.exit_code = 0
         self.push(VIEWS[view_name](self))
 
     def push(self, view):
@@ -890,7 +1081,7 @@ class App:
             if img:
                 s.blit(img, (x, 10))
                 x += 44
-        text(s, f"Ajustes · {base.title}", (x, 25), 24, medium=True, anchor="midleft")
+        text(s, getattr(base, "header", None) or f"Ajustes · {base.title}", (x, 25), 24, medium=True, anchor="midleft")
         text(s, time.strftime("%H:%M"), (W - 30, 25), 24, medium=True, anchor="midright")
 
     def draw_help(self, view):
@@ -954,8 +1145,9 @@ def main():
     if view not in VIEWS:
         print(f"Uso: aurora-settings {' | '.join(VIEWS)}", file=sys.stderr)
         return 1
-    App(view).run()
-    return 0
+    app = App(view)
+    app.run()
+    return app.exit_code
 
 
 if __name__ == "__main__":

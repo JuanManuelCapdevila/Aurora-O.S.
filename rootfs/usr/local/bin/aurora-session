@@ -28,19 +28,24 @@ aurora export-esde || true
 # Ajustes → Buscar juegos deja este archivo para pedir que ES-DE se reabra y
 # lea los juegos nuevos.
 RESTART_FLAG="$LOG_DIR/restart-frontend"
+rm -f "$LOG_DIR/running-game.json"
+
+# Dentro de cage: rotación, atajos del control durante los juegos (menú rápido)
+# y ES-DE. aurora-hotkeys termina solo cuando se cierra ES-DE.
+INNER='aurora-display apply; aurora-hotkeys & exec es-de'
 
 while :; do
   rm -f "$RESTART_FLAG"
   # -s permite cambiar de terminal virtual (Ctrl+Alt+F2) para mantenimiento.
   start=$(date +%s)
-  cage -s -- sh -c 'aurora-display apply; exec es-de'
+  cage -s -- sh -c "$INNER"
   status=$?
 
   # Si falló enseguida (ej. una máquina virtual sin aceleración 3D), se reintenta
   # con el renderizado por software de wlroots.
   if [ "$status" -ne 0 ] && [ $(($(date +%s) - start)) -lt 15 ]; then
     echo "=== cage/ES-DE terminó con $status: reintento con WLR_RENDERER=pixman"
-    WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 cage -s -- sh -c 'aurora-display apply; exec es-de'
+    WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 cage -s -- sh -c "$INNER"
     status=$?
   fi
 

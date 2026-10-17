@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""Atajos del control mientras corre un juego.
+
+- Select + Start (o el botón Guía): pausa el juego y abre el menú rápido
+  (aurora-settings quickmenu): volumen, brillo, energía y cerrar juego.
+- Select + Start mantenidos 2 segundos: cierra el juego sin preguntar (para
+  cuando se colgó).
+
+Corre dentro de cage (lo arranca aurora-session junto con ES-DE) para que el
+menú se abra encima del juego. Solo actúa si hay un juego en marcha, según
+~/.local/state/aurora/running-game.json (lo escribe `aurora launch-rom`). No
+toma el control en exclusiva: el juego sigue recibiendo los botones.
+"""
+
+import ctypes
+import json
+import os
+import select
+import signal
+import subprocess
+import sys
+import time
+
+try:
+    import evdev
+    from evdev import ecodes as e
+except ImportError:  # sin python-evdev no hay atajos, pero la sesión sigue
+    sys.exit(0)
+
+STATE = os.path.join(
+    os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "aurora", "running-game.json"
+)
+COMBO = {e.BTN_SELECT, e.BTN_START}
+HOLD_TO_CLOSE = 2.0
+RESCAN_EVERY = 3.0
+CLOSE_GRACE = 4.0
+EXIT_CLOSE = 10  # código de salida del menú rápido para "Cerrar juego"
+
+
+def die_with_parent():
+    """Termina junto con ES-DE (el proceso que lo lanzó) para no quedar suelto."""
+    try:
+        PR_SET_PDEATHSIG = 1
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+    except OSError:
+        pass
+    if os.getppid() == 1:
+        sys.exit(0)
+
+
+def running_game():
+    """El juego en marcha ({id, name, pid}) o None."""
+    try:
+        with open(STATE) as f:
+            game = json.load(f)
+        os.kill(game["pid"], 0)
+        return game
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def process_tree(root):
+    """PIDs del proceso y todos sus descendientes (Proton deja varios: wine, wineserver...)."""
+    children = {}
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/stat") as f:
+                # El nombre va entre paréntesis y puede tener espacios: se corta después del último ')'.
+                ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            continue
+        children.setdefault(ppid, []).append(int(entry))
+    tree, pending = [], [root]
+    while pending:
+        pid = pending.pop()
+        tree.append(pid)
+        pending.extend(children.get(pid, []))
+    return tree
+
+
+def signal_tree(root, sig):
+    for pid in process_tree(root):
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            pass
+
+
+def close_game(game):
+    print(f"aurora-hotkeys: cerrando {game.get('name')}", flush=True)
+    pids = process_tree(game["pid"])
+    for sig in (signal.SIGCONT, signal.SIGTERM):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+    deadline = time.monotonic() + CLOSE_GRACE
+    while time.monotonic() < deadline and any(alive(p) for p in pids):
+        time.sleep(0.2)
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def alive(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except (OSError, IndexError):
+        return False
+
+
+def open_menu(game):
+    """Pausa el juego, muestra el menú rápido y lo reanuda (o lo cierra)."""
+    signal_tree(game["pid"], signal.SIGSTOP)
+    code = 0
+    try:
+        env = dict(os.environ, AURORA_GAME_NAME=game.get("name", ""))
+        code = subprocess.call(["aurora-settings", "quickmenu"], env=env)
+    except OSError as err:
+        print(f"aurora-hotkeys: no se pudo abrir el menú: {err}", flush=True)
+    finally:
+        signal_tree(game["pid"], signal.SIGCONT)
+    if code == EXIT_CLOSE:
+        close_game(game)
+
+
+def is_pad(dev):
+    keys = dev.capabilities().get(e.EV_KEY, [])
+    return e.BTN_SOUTH in keys and (COMBO <= set(keys) or e.BTN_MODE in keys) and dev.name != "aurora-padkeys"
+
+
+class Pads:
+    def __init__(self):
+        self.devices = {}  # fd -> InputDevice
+        self.paths = set()
+        self.next_scan = 0.0
+
+    def rescan(self):
+        if time.monotonic() < self.next_scan:
+            return
+        self.next_scan = time.monotonic() + RESCAN_EVERY
+        for path in evdev.list_devices():
+            if path in self.paths:
+                continue
+            try:
+                dev = evdev.InputDevice(path)
+            except OSError:
+                continue
+            if is_pad(dev):
+                self.devices[dev.fd] = dev
+                self.paths.add(path)
+            else:
+                dev.close()
+
+    def drop(self, fd):
+        dev = self.devices.pop(fd)
+        self.paths.discard(dev.path)
+        dev.close()
+
+    def flush(self):
+        """Descarta lo que se apretó mientras el menú estaba abierto."""
+        for fd in list(self.devices):
+            try:
+                while self.devices[fd].read_one():
+                    pass
+            except OSError:
+                self.drop(fd)
+
+
+class Combo:
+    """Decide qué hacer según los botones: "menu", "close" o None."""
+
+    def __init__(self):
+        self.held = set()
+        self.since = None
+        self.used = False  # el combo ya disparó algo: no repetir hasta soltar
+
+    def feed(self, code, value):
+        """Un evento de botón (value 1 = apretado, 0 = suelto)."""
+        if value == 1:
+            self.held.add(code)
+            return "menu" if code == e.BTN_MODE else None
+        self.held.discard(code)
+        return None
+
+    def tick(self, now):
+        if COMBO <= self.held:
+            if self.since is None:
+                self.since, self.used = now, False
+            elif not self.used and now - self.since >= HOLD_TO_CLOSE:
+                self.used = True
+                return "close"
+        elif self.since is not None:
+            self.since = None
+            if not self.used:
+                return "menu"
+        return None
+
+    def reset(self):
+        self.held.clear()
+        self.since = None
+
+
+def main():
+    die_with_parent()
+    pads = Pads()
+    combo = Combo()
+
+    while True:
+        pads.rescan()
+        ready, _, _ = select.select(list(pads.devices), [], [], 0.25)
+        action = None
+        for fd in ready:
+            try:
+                events = list(pads.devices[fd].read())
+            except OSError:  # control desconectado
+                pads.drop(fd)
+                continue
+            for ev in events:
+                if ev.type == e.EV_KEY and ev.value in (0, 1):
+                    action = combo.feed(ev.code, ev.value) or action
+        action = combo.tick(time.monotonic()) or action
+
+        if not action:
+            continue
+        game = running_game()
+        if game:
+            if action == "menu":
+                open_menu(game)
+            else:
+                close_game(game)
+            pads.flush()
+        combo.reset()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass

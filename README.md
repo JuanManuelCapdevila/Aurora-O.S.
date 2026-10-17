@@ -56,6 +56,10 @@ la última versión de la rama principal en el pre-release
    - *Hardware*: resumen del hardware de la consola.
    - *Instalar Aurora*: en la **microSD** (Windows queda intacto) o en el SSD interno (lo borra).
    Las entradas de Ajustes no cuentan como juegos ni aparecen en *Todos*.
+5. Durante un juego:
+   - **Select + Start** (o el botón Guía) pausa el juego y abre el **menú rápido**: volver al juego, volumen,
+     brillo, modo de energía y cerrar juego.
+   - **Select + Start mantenidos 2 segundos** cierran el juego al instante (sirve si se colgó).
 
 Para construir el ISO localmente (necesita Docker):
 

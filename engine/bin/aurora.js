@@ -39,10 +39,13 @@ function parseArgs(argv) {
 
 const print = (obj) => console.log(JSON.stringify(obj, null, 2));
 
+const stateDir = () =>
+  path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'aurora');
+
 // Cada juego deja la salida de su última ejecución en
 // ~/.local/state/aurora/games/<id>.log (lo junta aurora-logs).
 function openGameLog(id) {
-  const dir = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'aurora', 'games');
+  const dir = path.join(stateDir(), 'games');
   try {
     fs.mkdirSync(dir, { recursive: true });
     return fs.openSync(path.join(dir, `${id}.log`), 'w');
@@ -61,16 +64,41 @@ function launch(system, id, { logToFile = false } = {}) {
   for (const action of applyWrappers(plan)) log(`[aurora] ${action}`);
   log(`[aurora] ${[plan.command, ...plan.args].join(' ')}`);
 
+  // El juego va en su propio grupo de procesos: aurora-hotkeys lo pausa o lo
+  // cierra entero (Proton deja varios procesos) sin tocar a ES-DE.
   const child = spawn(plan.command, plan.args, {
     cwd: plan.cwd,
     env: { ...process.env, ...plan.env },
     stdio: fd === null ? 'inherit' : ['inherit', fd, fd],
+    detached: true,
   });
+  const running = path.join(stateDir(), 'running-game.json');
+  const clear = () => fs.rmSync(running, { force: true });
+  if (child.pid) {
+    try {
+      fs.mkdirSync(stateDir(), { recursive: true });
+      fs.writeFileSync(running, JSON.stringify({ id: game.id, name: game.name, pid: child.pid }) + '\n');
+    } catch {
+      // Sin este archivo el juego corre igual, solo sin menú rápido.
+    }
+  }
+  // Si ES-DE corta el lanzador, el juego se cierra con él.
+  for (const sig of ['SIGTERM', 'SIGHUP']) {
+    process.on(sig, () => {
+      try {
+        process.kill(-child.pid, sig);
+      } catch {
+        // Ya terminó.
+      }
+    });
+  }
   child.on('error', (err) => {
+    clear();
     log(`[aurora] no se pudo ejecutar ${plan.command}: ${err.message}`);
     process.exit(127);
   });
   child.on('exit', (code, signal) => {
+    clear();
     log(`[aurora] terminó: ${signal ? `señal ${signal}` : `código ${code}`}`);
     process.exit(signal ? 1 : code ?? 0);
   });
