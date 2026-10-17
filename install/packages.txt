@@ -7,6 +7,7 @@ git
 sudo
 nodejs
 python
+python-evdev
 unzip
 curl
 jq

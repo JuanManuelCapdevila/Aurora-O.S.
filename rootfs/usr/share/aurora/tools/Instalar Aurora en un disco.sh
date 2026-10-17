@@ -1,2 +1,2 @@
 #!/bin/sh
-exec foot -e sudo aurora-install
+exec aurora-tool sudo aurora-install

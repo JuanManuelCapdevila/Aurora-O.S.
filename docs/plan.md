@@ -20,8 +20,8 @@ aceptando resolución baja (la pantalla es de 5,94" a 720p).
 
 - **Orientación del panel:** confirmado en la consola: el panel es vertical y sale girado 90°.
   `left_side_up` dejó el texto de cabeza, así que va `video=eDP-1:panel_orientation=right_side_up`
-  (`iso/kernel-params`). La sesión usa `aurora-display` con 270° por defecto (`/etc/aurora/display.conf`),
-  falta confirmarlo; la herramienta *Girar pantalla* lo ajusta. El menú de arranque lo dibuja el firmware.
+  (`iso/kernel-params`). La sesión usa `aurora-display` con 270° (`/etc/aurora/display.conf`): **confirmado
+  en la consola**. El menú de arranque lo dibuja el firmware y sigue girado.
 - **copytoram:** el live copiaba la imagen entera a la RAM (minutos con un USB lento y ~2 GB de RAM menos);
   se arranca con `copytoram=n`.
 - **Control en modo gamepad:** que aparezca como XInput (`/proc/bus/input/devices`).

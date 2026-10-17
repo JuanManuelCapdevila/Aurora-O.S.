@@ -1,0 +1,7 @@
+// El usuario de juego administra el Wi-Fi (buscar, conectar, olvidar redes)
+// sin que NetworkManager pida la contraseña de administrador.
+polkit.addRule(function (action, subject) {
+  if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 && subject.isInGroup("wheel")) {
+    return polkit.Result.YES;
+  }
+});

@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+"""Traduce el control a teclas mientras una herramienta de texto está abierta.
+
+Cruceta y stick izquierdo = flechas, A = Enter, B = Esc, X = Borrar, Y = Tab,
+LB/RB = Re Pág/Av Pág, Start = Enter, Select = Esc. No toma el control en
+exclusiva: solo agrega un teclado virtual (uinput) mientras viva el proceso
+indicado con --while-pid. Necesita acceso a /dev/uinput (grupo input, regla
+de udev de Aurora) y a /dev/input/event* (grupo input).
+"""
+
+import argparse
+import os
+import select
+import sys
+import time
+
+try:
+    import evdev
+    from evdev import ecodes as e
+except ImportError:  # sin python-evdev la herramienta igual abre, solo sin control
+    sys.exit(0)
+
+BUTTONS = {
+    e.BTN_SOUTH: e.KEY_ENTER,
+    e.BTN_EAST: e.KEY_ESC,
+    e.BTN_WEST: e.KEY_BACKSPACE,
+    e.BTN_NORTH: e.KEY_TAB,
+    e.BTN_TL: e.KEY_PAGEUP,
+    e.BTN_TR: e.KEY_PAGEDOWN,
+    e.BTN_START: e.KEY_ENTER,
+    e.BTN_SELECT: e.KEY_ESC,
+    e.BTN_DPAD_UP: e.KEY_UP,
+    e.BTN_DPAD_DOWN: e.KEY_DOWN,
+    e.BTN_DPAD_LEFT: e.KEY_LEFT,
+    e.BTN_DPAD_RIGHT: e.KEY_RIGHT,
+}
+# Ejes: (negativo, positivo). La cruceta suele llegar como HAT0X/HAT0Y.
+AXES = {
+    e.ABS_HAT0X: (e.KEY_LEFT, e.KEY_RIGHT),
+    e.ABS_HAT0Y: (e.KEY_UP, e.KEY_DOWN),
+    e.ABS_X: (e.KEY_LEFT, e.KEY_RIGHT),
+    e.ABS_Y: (e.KEY_UP, e.KEY_DOWN),
+}
+STICK_THRESHOLD = 0.6
+
+
+def is_gamepad(dev):
+    caps = dev.capabilities()
+    return e.BTN_SOUTH in caps.get(e.EV_KEY, []) and dev.name != "aurora-padkeys"
+
+
+def axis_direction(dev, code, value):
+    """-1, 0 o 1 según la posición del eje (normalizada para sticks analógicos)."""
+    if code in (e.ABS_HAT0X, e.ABS_HAT0Y):
+        return (value > 0) - (value < 0)
+    info = dev.absinfo(code)
+    center = (info.max + info.min) / 2
+    half = (info.max - info.min) / 2 or 1
+    pos = (value - center) / half
+    return 1 if pos > STICK_THRESHOLD else -1 if pos < -STICK_THRESHOLD else 0
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--while-pid", type=int, help="terminar cuando este proceso termine")
+    args = parser.parse_args()
+
+    pads = [d for d in (evdev.InputDevice(p) for p in evdev.list_devices()) if is_gamepad(d)]
+    if not pads:
+        return
+    keys = sorted(set(BUTTONS.values()) | {k for pair in AXES.values() for k in pair})
+    ui = evdev.UInput({e.EV_KEY: keys}, name="aurora-padkeys")
+    axis_state = {}
+
+    def tap(key, down):
+        ui.write(e.EV_KEY, key, 1 if down else 0)
+        ui.syn()
+
+    try:
+        fds = {p.fd: p for p in pads}
+        while args.while_pid is None or alive(args.while_pid):
+            ready, _, _ = select.select(list(fds), [], [], 0.5)
+            for fd in ready:
+                dev = fds[fd]
+                try:
+                    events = list(dev.read())
+                except OSError:  # control desconectado
+                    del fds[fd]
+                    continue
+                for ev in events:
+                    if ev.type == e.EV_KEY and ev.code in BUTTONS and ev.value in (0, 1):
+                        tap(BUTTONS[ev.code], ev.value == 1)
+                    elif ev.type == e.EV_ABS and ev.code in AXES:
+                        new = axis_direction(dev, ev.code, ev.value)
+                        old = axis_state.get((fd, ev.code), 0)
+                        if new != old:
+                            neg, pos = AXES[ev.code]
+                            if old:
+                                tap(pos if old > 0 else neg, False)
+                            if new:
+                                tap(pos if new > 0 else neg, True)
+                            axis_state[(fd, ev.code)] = new
+            if not fds:
+                time.sleep(0.5)
+    finally:
+        ui.close()
+
+
+if __name__ == "__main__":
+    main()

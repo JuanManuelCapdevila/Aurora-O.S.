@@ -1,2 +1,2 @@
 #!/bin/sh
-exec foot -e aurora-scan-games --pause
+exec aurora-tool aurora-scan-games --pause

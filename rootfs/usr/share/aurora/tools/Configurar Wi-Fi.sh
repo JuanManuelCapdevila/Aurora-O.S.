@@ -1,3 +1,3 @@
 #!/bin/sh
-# Necesita un teclado (USB o Bluetooth) para escribir la contraseña.
-exec foot -e nmtui
+# Busca redes, se conecta y pide la clave con teclado en pantalla.
+exec aurora-tool aurora-wifi

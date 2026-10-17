@@ -1,0 +1,3 @@
+# aurora-padkeys crea un teclado virtual para manejar las herramientas con el
+# control: el grupo input (al que pertenece el usuario de juego) puede usar uinput.
+KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Abre una herramienta de texto a pantalla completa (foot) que se puede manejar
+# con el control: mientras está abierta, aurora-padkeys traduce el control a
+# teclas. Un teclado físico también funciona.
+#
+# Uso: aurora-tool <comando> [argumentos...]
+
+foot -e "$@" &
+foot_pid=$!
+aurora-padkeys --while-pid "$foot_pid" &
+wait "$foot_pid"
+status=$?
+wait
+exit "$status"

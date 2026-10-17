@@ -1,2 +1,2 @@
 #!/bin/sh
-exec foot
+exec aurora-tool bash -l

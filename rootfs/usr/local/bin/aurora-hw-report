@@ -14,7 +14,32 @@ run() {
   if command -v "$1" >/dev/null; then "$@" 2>&1; else echo "(no instalado: $1)"; fi
 }
 
+# Resumen en una pantalla: lo que más sirve para ajustar la imagen a la consola.
+summary() {
+  section "Resumen"
+  printf 'CPU:      %s\n' "$(lscpu 2>/dev/null | sed -n 's/^\(Model name\|Nombre del modelo\): *//p' | head -n1)"
+  printf 'RAM:      %s\n' "$(free -h 2>/dev/null | awk '/^(Mem|Mem\.):/ {print $2}')"
+  printf 'GPU:      %s\n' "$(lspci 2>/dev/null | grep -Ei 'vga|display|3d' | cut -d: -f3- | head -n1)"
+  lspci -k 2>/dev/null | grep -A3 -Ei 'network|wireless' | awk '
+    /Network|Wireless/ { sub(/^[^:]*: /, ""); name = $0 }
+    /Kernel driver in use/ { sub(/.*: /, ""); printf "Wi-Fi:    %s (driver: %s)\n", name, $0; name = "" }
+    END { if (name != "") printf "Wi-Fi:    %s (SIN DRIVER)\n", name }'
+  for c in /sys/class/drm/card*-*; do
+    [[ "$(cat "$c/status" 2>/dev/null)" == connected ]] || continue
+    printf 'Pantalla: %s %s\n' "${c##*/card?-}" "$(head -n1 "$c/modes" 2>/dev/null)"
+  done
+  grep -E '^N: Name' /proc/bus/input/devices 2>/dev/null | sed 's/^N: Name="\(.*\)"/\1/' |
+    grep -Ei 'pad|x-box|xbox|controller|joystick|touch' | sed 's/^/Entrada:  /'
+  for b in /sys/class/power_supply/BAT*; do
+    [[ -r "$b/capacity" ]] && printf 'Batería:  %s%% (%s)\n' "$(cat "$b/capacity")" "$(cat "$b/status" 2>/dev/null)"
+  done
+  echo
+  echo "(Detalle completo abajo: Espacio = página siguiente, b = anterior, q = salir)"
+}
+
 {
+  summary
+
   section "Sistema"
   uname -a
   cat /etc/os-release 2>/dev/null | head -n 3

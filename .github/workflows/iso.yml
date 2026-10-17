@@ -11,6 +11,7 @@ on:
       - 'iso/**'
       - 'rootfs/**'
       - 'theme/**'
+      - 'tests/**'
       - '.github/workflows/iso.yml'
   workflow_dispatch:
 
@@ -31,6 +32,8 @@ jobs:
           node-version: 22
       - name: Tests del motor
         run: cd engine && npm test
+      - name: Tests de las herramientas (Python)
+        run: python3 -m unittest discover -s tests -v
       - name: Validar el tema de ES-DE
         run: node theme/validate.mjs
       - name: ShellCheck

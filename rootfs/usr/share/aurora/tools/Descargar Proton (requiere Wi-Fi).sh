@@ -1,2 +1,2 @@
 #!/bin/sh
-exec foot -e aurora-prepare-proton
+exec aurora-tool aurora-prepare-proton
