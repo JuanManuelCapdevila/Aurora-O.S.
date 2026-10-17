@@ -18,10 +18,12 @@ aceptando resolución baja (la pantalla es de 5,94" a 720p).
 
 ## Puntos a validar en la consola (fases 0–2)
 
-- **Orientación del panel:** confirmado en la consola: el panel es vertical y sale girado 90°. Se corrige con
-  `video=eDP-1:panel_orientation=left_side_up` (consola de texto, `iso/kernel-params`) y `aurora-display`
-  (sesión, 90° por defecto en `/etc/aurora/display.conf`). Falta confirmar que ese sentido es el correcto; si
-  no, la herramienta *Girar pantalla* lo ajusta. El menú de arranque lo dibuja el firmware y no se rota.
+- **Orientación del panel:** confirmado en la consola: el panel es vertical y sale girado 90°.
+  `left_side_up` dejó el texto de cabeza, así que va `video=eDP-1:panel_orientation=right_side_up`
+  (`iso/kernel-params`). La sesión usa `aurora-display` con 270° por defecto (`/etc/aurora/display.conf`),
+  falta confirmarlo; la herramienta *Girar pantalla* lo ajusta. El menú de arranque lo dibuja el firmware.
+- **copytoram:** el live copiaba la imagen entera a la RAM (minutos con un USB lento y ~2 GB de RAM menos);
+  se arranca con `copytoram=n`.
 - **Control en modo gamepad:** que aparezca como XInput (`/proc/bus/input/devices`).
 - **gamescope anidado en cage:** cada juego abre su gamescope como ventana Wayland dentro de cage. Si da
   problemas, la alternativa es que la sesión alterne entre ES-DE y gamescope sin anidar.

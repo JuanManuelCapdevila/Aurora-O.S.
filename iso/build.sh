@@ -84,8 +84,9 @@ if [[ -d "$PROFILE/efiboot/loader/entries" ]]; then
   # Solo la entrada principal de arranque (sin voz, memtest ni shell UEFI).
   find "$PROFILE/efiboot/loader/entries" -type f ! -name '01-*' -delete
   sed -i 's/^timeout .*/timeout 3/' "$PROFILE/efiboot/loader/loader.conf"
-  # Más espacio para escribir en el live (la RAM se usa solo si hace falta).
-  sed -i "/^options/ s/\$/ cow_spacesize=4G $KERNEL_PARAMS/" "$PROFILE"/efiboot/loader/entries/01-*.conf
+  # Más espacio para escribir en el live (la RAM se usa solo si hace falta) y sin
+  # copiar la imagen entera a la RAM al arrancar (tarda minutos y ocupa ~2 GB).
+  sed -i "/^options/ s/\$/ cow_spacesize=4G copytoram=n $KERNEL_PARAMS/" "$PROFILE"/efiboot/loader/entries/01-*.conf
 fi
 
 if [[ -d "$PROFILE/syslinux" ]]; then
@@ -94,7 +95,7 @@ if [[ -d "$PROFILE/syslinux" ]]; then
   awk 'BEGIN { RS=""; ORS="\n\n" } !/LABEL [^\n]*speech/' "$PROFILE/syslinux/archiso_sys-linux.cfg" \
     > "$PROFILE/syslinux/archiso_sys-linux.cfg.new"
   mv "$PROFILE/syslinux/archiso_sys-linux.cfg.new" "$PROFILE/syslinux/archiso_sys-linux.cfg"
-  sed -i "/^APPEND/ s/\$/ cow_spacesize=4G $KERNEL_PARAMS/" "$PROFILE/syslinux/archiso_sys-linux.cfg"
+  sed -i "/^APPEND/ s/\$/ cow_spacesize=4G copytoram=n $KERNEL_PARAMS/" "$PROFILE/syslinux/archiso_sys-linux.cfg"
   cat > "$PROFILE/syslinux/archiso_tail.cfg" <<'CFG'
 LABEL reboot
 MENU LABEL Reiniciar
