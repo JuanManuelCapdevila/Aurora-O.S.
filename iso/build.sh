@@ -14,6 +14,9 @@ BUILD_DIR="${BUILD_DIR:-/tmp/aurora-build}"
 PROFILE="$BUILD_DIR/profile"
 LOCAL_REPO="$BUILD_DIR/localrepo"
 AURORA_USER=player
+# El panel de la Win600 es vertical y está montado de costado: rota la consola
+# de texto del arranque. Solo afecta a la pantalla interna (eDP-1).
+KERNEL_PARAMS="$(cat "$REPO_DIR/iso/kernel-params")"
 
 log() { printf '\n\033[1;35m==> %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31mError: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -82,7 +85,7 @@ if [[ -d "$PROFILE/efiboot/loader/entries" ]]; then
   find "$PROFILE/efiboot/loader/entries" -type f ! -name '01-*' -delete
   sed -i 's/^timeout .*/timeout 3/' "$PROFILE/efiboot/loader/loader.conf"
   # Más espacio para escribir en el live (la RAM se usa solo si hace falta).
-  sed -i '/^options/ s/$/ cow_spacesize=4G/' "$PROFILE"/efiboot/loader/entries/01-*.conf
+  sed -i "/^options/ s/\$/ cow_spacesize=4G $KERNEL_PARAMS/" "$PROFILE"/efiboot/loader/entries/01-*.conf
 fi
 
 if [[ -d "$PROFILE/syslinux" ]]; then
@@ -91,7 +94,7 @@ if [[ -d "$PROFILE/syslinux" ]]; then
   awk 'BEGIN { RS=""; ORS="\n\n" } !/LABEL [^\n]*speech/' "$PROFILE/syslinux/archiso_sys-linux.cfg" \
     > "$PROFILE/syslinux/archiso_sys-linux.cfg.new"
   mv "$PROFILE/syslinux/archiso_sys-linux.cfg.new" "$PROFILE/syslinux/archiso_sys-linux.cfg"
-  sed -i '/^APPEND/ s/$/ cow_spacesize=4G/' "$PROFILE/syslinux/archiso_sys-linux.cfg"
+  sed -i "/^APPEND/ s/\$/ cow_spacesize=4G $KERNEL_PARAMS/" "$PROFILE/syslinux/archiso_sys-linux.cfg"
   cat > "$PROFILE/syslinux/archiso_tail.cfg" <<'CFG'
 LABEL reboot
 MENU LABEL Reiniciar
@@ -127,6 +130,8 @@ mkdir -p "$AIROOTFS"
 cp -a "$REPO_DIR/rootfs/." "$AIROOTFS/"
 cp -a "$REPO_DIR/iso/airootfs/." "$AIROOTFS/"
 sed -i "s/@AURORA_USER@/$AURORA_USER/" "$AIROOTFS/etc/greetd/config.toml"
+# El instalador agrega los mismos parámetros a la entrada de arranque del sistema instalado.
+install -Dm644 "$REPO_DIR/iso/kernel-params" "$AIROOTFS/etc/aurora/kernel-params"
 # pacman.conf del sistema instalado: el de Arch con multilib (sin el repo local).
 cp /etc/pacman.conf "$AIROOTFS/etc/pacman.conf"
 

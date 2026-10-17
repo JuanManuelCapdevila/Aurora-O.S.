@@ -25,14 +25,14 @@ aurora export-esde || true
 
 # -s permite cambiar de terminal virtual (Ctrl+Alt+F2) para mantenimiento.
 start=$(date +%s)
-cage -s -- es-de
+cage -s -- sh -c 'aurora-display apply; exec es-de'
 status=$?
 
 # Si falló enseguida (ej. una máquina virtual sin aceleración 3D), se reintenta
 # con el renderizado por software de wlroots.
 if [ "$status" -ne 0 ] && [ $(($(date +%s) - start)) -lt 15 ]; then
   echo "=== cage/ES-DE terminó con $status: reintento con WLR_RENDERER=pixman"
-  WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 cage -s -- es-de
+  WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 cage -s -- sh -c 'aurora-display apply; exec es-de'
   status=$?
 fi
 

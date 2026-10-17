@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Rotación de la pantalla interna dentro de la sesión (cage, vía wlr-randr).
+#
+# El panel de la Win600 es vertical de fábrica y está montado de costado: sin
+# rotar, todo se ve girado 90°. Solo se tocan las salidas internas (eDP*), así
+# que monitores externos y máquinas virtuales quedan como están.
+#
+# Uso:
+#   aurora-display apply    aplica la rotación guardada (lo hace aurora-session)
+#   aurora-display rotate   gira 90° más, guarda y aplica (herramienta "Girar pantalla")
+#   aurora-display set N    N = 0, 90, 180 o 270
+#
+# Configuración: /var/lib/aurora/display.conf (la del usuario) o, si no existe,
+# /etc/aurora/display.conf (la de la imagen).
+
+set -uo pipefail
+
+DEFAULT_CONF=/etc/aurora/display.conf
+USER_CONF=/var/lib/aurora/display.conf
+VALUES=(0 90 180 270)
+
+current() {
+  local rotation=0
+  for conf in "$DEFAULT_CONF" "$USER_CONF"; do
+    # shellcheck source=/dev/null
+    [[ -r "$conf" ]] && rotation="$(. "$conf"; echo "${ROTATION:-0}")"
+  done
+  echo "$rotation"
+}
+
+save() {
+  sudo -n install -d /var/lib/aurora &&
+    echo "ROTATION=$1" | sudo -n tee "$USER_CONF" >/dev/null
+}
+
+internal_outputs() {
+  wlr-randr 2>/dev/null | awk '/^[^ ]/ { print $1 }' | grep -E '^eDP' || true
+}
+
+apply() {
+  local rotation="$1" transform
+  transform="$([[ "$rotation" == 0 ]] && echo normal || echo "$rotation")"
+  local outputs
+  outputs="$(internal_outputs)"
+  if [[ -z "$outputs" ]]; then
+    echo "Sin pantalla interna (eDP): no se rota nada."
+    return 0
+  fi
+  for output in $outputs; do
+    wlr-randr --output "$output" --transform "$transform" && echo "$output: rotación $rotation°"
+  done
+}
+
+case "${1:-apply}" in
+  apply)
+    apply "$(current)"
+    ;;
+  rotate)
+    now="$(current)"
+    next=0
+    for i in "${!VALUES[@]}"; do
+      [[ "${VALUES[$i]}" == "$now" ]] && next="${VALUES[$(((i + 1) % 4))]}"
+    done
+    save "$next" && apply "$next"
+    ;;
+  set)
+    [[ " ${VALUES[*]} " == *" ${2:-x} "* ]] || { echo "Valores válidos: ${VALUES[*]}" >&2; exit 1; }
+    save "$2" && apply "$2"
+    ;;
+  *)
+    echo "Uso: aurora-display apply | rotate | set 0|90|180|270" >&2
+    exit 1
+    ;;
+esac

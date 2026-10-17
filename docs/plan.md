@@ -18,8 +18,10 @@ aceptando resolución baja (la pantalla es de 5,94" a 720p).
 
 ## Puntos a validar en la consola (fases 0–2)
 
-- **Orientación del panel:** si el modo preferido aparece como 720×1280, agregar `fbcon=rotate:` al kernel y
-  la rotación correspondiente en cage/gamescope.
+- **Orientación del panel:** confirmado en la consola: el panel es vertical y sale girado 90°. Se corrige con
+  `video=eDP-1:panel_orientation=left_side_up` (consola de texto, `iso/kernel-params`) y `aurora-display`
+  (sesión, 90° por defecto en `/etc/aurora/display.conf`). Falta confirmar que ese sentido es el correcto; si
+  no, la herramienta *Girar pantalla* lo ajusta. El menú de arranque lo dibuja el firmware y no se rota.
 - **Control en modo gamepad:** que aparezca como XInput (`/proc/bus/input/devices`).
 - **gamescope anidado en cage:** cada juego abre su gamescope como ventana Wayland dentro de cage. Si da
   problemas, la alternativa es que la sesión alterne entre ES-DE y gamescope sin anidar.

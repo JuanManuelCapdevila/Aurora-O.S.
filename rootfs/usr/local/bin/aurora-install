@@ -121,7 +121,7 @@ cat > /boot/loader/entries/aurora.conf <<'ENTRY'
 title   Aurora O.S.
 linux   /vmlinuz-linux
 initrd  /initramfs-linux.img
-options root=PARTUUID=$ROOT_PARTUUID rw quiet loglevel=3
+options root=PARTUUID=$ROOT_PARTUUID rw quiet loglevel=3 $(cat /etc/aurora/kernel-params 2>/dev/null)
 ENTRY
 pacman-key --init
 pacman-key --populate archlinux
