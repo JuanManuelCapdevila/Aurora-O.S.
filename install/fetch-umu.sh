@@ -11,8 +11,19 @@ DEST="${1:?Uso: fetch-umu.sh <directorio-destino>}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-url="$(curl -fsSL https://api.github.com/repos/Open-Wine-Components/umu-launcher/releases/latest |
-  jq -r '[.assets[] | select(.name | test("zipapp\\.tar$"))][0].browser_download_url // empty')"
+REPO=Open-Wine-Components/umu-launcher
+# La API de GitHub limita los pedidos sin autenticar (403 en CI): se usa el
+# token si hay uno y, si la API falla, se arma la URL desde la redirección de
+# releases/latest, que no tiene ese límite.
+auth=()
+[[ -n "${GITHUB_TOKEN:-}" ]] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+url="$(curl -fsSL "${auth[@]}" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
+  jq -r '[.assets[] | select(.name | test("zipapp\\.tar$"))][0].browser_download_url // empty' || true)"
+if [[ -z "$url" ]]; then
+  tag="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")"
+  tag="${tag##*/}"
+  [[ -n "$tag" && "$tag" != latest ]] && url="https://github.com/$REPO/releases/download/$tag/umu-launcher-$tag-zipapp.tar"
+fi
 [[ -n "$url" ]] || { echo "Error: no se encontró el zipapp de umu-launcher" >&2; exit 1; }
 
 echo "umu-launcher: $url"

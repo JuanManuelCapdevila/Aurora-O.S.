@@ -69,9 +69,11 @@ jobs:
           df -h /
 
       - name: Construir el ISO (contenedor Arch Linux)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
-          docker run --rm --privileged -v "$PWD:/repo" -e OUT_DIR=/repo/out \
+          docker run --rm --privileged -v "$PWD:/repo" -e OUT_DIR=/repo/out -e GITHUB_TOKEN \
             archlinux:latest bash -c '/repo/iso/build.sh && { /repo/iso/preview.sh || echo "Las capturas fallaron (no bloquea el ISO)"; }' \
             2>&1 | tee build.log
           sudo chown -R "$(id -u):$(id -g)" out
