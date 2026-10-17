@@ -21,7 +21,6 @@ for cmd in node aurora gamescope cage es-de umu-run gamemoderun mangohud foot nm
 done
 check "python-evdev (control en herramientas)" python3 -c "import evdev"
 check "pygame y aurora_nm (Ajustes gráficos)" python3 -c "import pygame, sys; sys.path.insert(0, '/usr/lib/aurora/python'); import aurora_nm"
-check "lista de Ajustes sin contar como juegos" grep -q nogamecount /home/player/ES-DE/gamelists/aurora/gamelist.xml
 check "glifos de Ajustes" test -f /usr/share/aurora/es-de/settings/icons/wifi.png
 check "regla de uinput" test -f /etc/udev/rules.d/70-aurora-uinput.rules
 check "regla de polkit para Wi-Fi" test -f /etc/polkit-1/rules.d/50-aurora-networkmanager.rules
@@ -37,7 +36,8 @@ check "home de player" test "$(stat -c %U /home/player 2>/dev/null)" = player
 check "aurora help" runuser -u player -- env HOME=/home/player aurora help
 check "aurora export-esde" runuser -u player -- env HOME=/home/player aurora export-esde
 check "es_systems.xml generado" test -f /home/player/ES-DE/custom_systems/es_systems.xml
-check "herramientas de ES-DE" test -f "/usr/share/aurora/tools/Instalar Aurora en un disco.sh"
+check "herramientas de ES-DE" test -f "/usr/share/aurora/tools/Instalar Aurora.sh"
+check "lista de Ajustes sin contar como juegos" grep -q nogamecount /home/player/ES-DE/gamelists/aurora/gamelist.xml
 check "tema aurora-material" test -f /usr/share/aurora/es-de/themes/aurora-material/theme.xml
 check "íconos de herramientas" test -f /usr/share/aurora/es-de/media/aurora/covers/Terminal.png
 check "tema enlazado en ES-DE" test -f /home/player/ES-DE/themes/aurora-material/theme.xml
