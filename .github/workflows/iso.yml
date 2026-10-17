@@ -40,8 +40,20 @@ jobs:
         run: |
           pip install --quiet shellcheck-py==0.11.0.1
           shellcheck --version
-          shellcheck install/*.sh iso/build.sh iso/preview.sh rootfs/usr/local/bin/* \
-            rootfs/usr/share/aurora/tools/*.sh iso/airootfs/usr/local/bin/*
+          # Solo los scripts de shell (en rootfs/usr/local/bin también hay Python).
+          files=()
+          for f in install/*.sh iso/*.sh rootfs/usr/local/bin/* rootfs/usr/share/aurora/tools/*.sh \
+                   iso/airootfs/usr/local/bin/*; do
+            [ -f "$f" ] && head -n1 "$f" | grep -qE '^#!.*\b(sh|bash)\b' && files+=("$f")
+          done
+          shellcheck "${files[@]}"
+      - name: Compilar los scripts de Python
+        run: |
+          for f in rootfs/usr/local/bin/*; do
+            if [ -f "$f" ] && head -n1 "$f" | grep -q python; then
+              python3 -m py_compile "$f" && echo "ok $f"
+            fi
+          done
 
   iso:
     needs: check
