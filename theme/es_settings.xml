@@ -11,3 +11,5 @@
 <bool name="SystemStatusBattery" value="true" />
 <bool name="SystemStatusBatteryPercentage" value="true" />
 <bool name="SplashScreen" value="false" />
+<!-- Sin el cartel "Lanzando juego" al abrir un juego o una entrada de Ajustes. -->
+<string name="LaunchScreenDuration" value="disabled" />

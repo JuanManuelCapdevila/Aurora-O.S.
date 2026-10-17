@@ -98,6 +98,31 @@ test('export-esde enlaza el tema, los íconos y la configuración inicial sin pi
   assert.equal(fs.readFileSync(settings, 'utf8'), '<string name="Theme" value="otro" />');
 });
 
+test('export-esde agrega a la configuración del usuario solo las opciones nuevas de Aurora', () => {
+  const { root, system } = setup();
+  const assets = path.join(root, 'assets');
+  writeFile(
+    path.join(assets, 'es_settings.xml'),
+    [
+      '<?xml version="1.0"?>',
+      '<string name="Theme" value="aurora-material" />',
+      '<string name="LaunchScreenDuration" value="disabled" />',
+      '',
+    ].join('\n'),
+  );
+  system.esdeAssetsDir = assets;
+  const settings = path.join(system.esdeDir, 'settings', 'es_settings.xml');
+  writeFile(settings, '<?xml version="1.0"?>\n<string name="Theme" value="otro" />');
+
+  assert.deepEqual(exportEsde(system).assets.installed, [settings]);
+  assert.equal(
+    fs.readFileSync(settings, 'utf8'),
+    '<?xml version="1.0"?>\n<string name="Theme" value="otro" />\n<string name="LaunchScreenDuration" value="disabled" />\n',
+  );
+  // La segunda vez ya no hay nada que agregar.
+  assert.deepEqual(exportEsde(system).assets.installed, []);
+});
+
 test('export-esde funciona sin recursos del tema instalados', () => {
   const { root, system } = setup();
   system.esdeAssetsDir = path.join(root, 'no-existe');

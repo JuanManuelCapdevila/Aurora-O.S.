@@ -92,7 +92,8 @@ function writeToolsGamelist(system) {
 
 // Enlaza el tema y los íconos de las herramientas dentro de ~/ES-DE y deja la
 // configuración inicial si el usuario todavía no tiene una. Nunca pisa archivos
-// del usuario: solo crea lo que falta.
+// del usuario: solo crea lo que falta (y agrega las opciones nuevas de Aurora
+// que su configuración todavía no tenga).
 function installEsdeAssets(system) {
   const assets = system.esdeAssetsDir;
   if (!assets || !fs.existsSync(assets)) return { installed: [] };
@@ -118,8 +119,29 @@ function installEsdeAssets(system) {
     fs.mkdirSync(path.dirname(settings), { recursive: true });
     fs.copyFileSync(defaults, settings);
     installed.push(settings);
+  } else if (fs.existsSync(defaults) && addMissingSettings(defaults, settings)) {
+    installed.push(settings);
   }
   return { installed };
+}
+
+// Agrega al es_settings.xml del usuario las opciones de Aurora que le faltan
+// (ej. las que se sumaron en una versión nueva). Las que ya tiene no se tocan.
+function addMissingSettings(defaults, settings) {
+  const option = /^\s*<\w+ name="([^"]+)"/;
+  const current = fs.readFileSync(settings, 'utf8');
+  const present = new Set(current.split('\n').map((l) => l.match(option)?.[1]).filter(Boolean));
+  const missing = fs
+    .readFileSync(defaults, 'utf8')
+    .split('\n')
+    .filter((l) => {
+      const m = l.match(option);
+      return m && !present.has(m[1]);
+    });
+  if (missing.length === 0) return false;
+  const sep = current === '' || current.endsWith('\n') ? '' : '\n';
+  fs.writeFileSync(settings, `${current}${sep}${missing.map((l) => l.trim()).join('\n')}\n`);
+  return true;
 }
 
 function exportEsde(system) {
