@@ -82,11 +82,14 @@ RELENG=/usr/share/archiso/configs/releng
 for dir in efiboot syslinux grub; do
   [[ -d "$RELENG/$dir" ]] && cp -a "$RELENG/$dir" "$PROFILE/"
 done
-# Menús de arranque como Ubuntu: "Probar Aurora" (live) e "Instalar Aurora"
-# (arranca directo al instalador, con aurora.install). Se arman para los tres
+# Menús de arranque como Ubuntu: "Probar Aurora" (live), "Probar Aurora en
+# memoria" (copia todo a la RAM: después se puede sacar el USB, por ejemplo
+# para conectar el de los juegos) e "Instalar Aurora" (arranca directo al
+# instalador, con aurora.install). Se arman para los tres
 # cargadores que puede usar el ISO: systemd-boot y GRUB (UEFI) y syslinux (BIOS).
 LIVE_PARAMS="cow_spacesize=4G copytoram=n $KERNEL_PARAMS"
 TRY_TITLE="Probar Aurora (sin instalar)"
+RAM_TITLE="Probar Aurora en memoria (se puede sacar el USB)"
 INSTALL_TITLE="Instalar Aurora"
 
 if [[ -d "$PROFILE/efiboot/loader/entries" ]]; then
@@ -95,14 +98,16 @@ if [[ -d "$PROFILE/efiboot/loader/entries" ]]; then
   sed -i 's/^timeout .*/timeout 5/' "$PROFILE/efiboot/loader/loader.conf"
   main="$(find "$PROFILE/efiboot/loader/entries" -name '01-*.conf' | head -n1)"
   sed -i -e "/^options/ s/\$/ $LIVE_PARAMS/" -e "s/^title .*/title    $TRY_TITLE/" "$main"
-  sed -e "/^options/ s/\$/ aurora.install/" -e "s/^title .*/title    $INSTALL_TITLE/" -e "s/^sort-key .*/sort-key 02/" \
-    "$main" > "$PROFILE/efiboot/loader/entries/02-aurora-install.conf"
+  sed -e "s/copytoram=n/copytoram=y/" -e "s/^title .*/title    $RAM_TITLE/" -e "s/^sort-key .*/sort-key 02/" \
+    "$main" > "$PROFILE/efiboot/loader/entries/02-aurora-ram.conf"
+  sed -e "/^options/ s/\$/ aurora.install/" -e "s/^title .*/title    $INSTALL_TITLE/" -e "s/^sort-key .*/sort-key 03/" \
+    "$main" > "$PROFILE/efiboot/loader/entries/03-aurora-install.conf"
 fi
 
 # GRUB: cada "menuentry ... { ... }" de arranque del live queda como "Probar" y
 # se duplica como "Instalar"; se quitan las entradas con voz (speech).
 grub_menu() {
-  awk -v params="$LIVE_PARAMS" -v try="$TRY_TITLE" -v inst="$INSTALL_TITLE" '
+  awk -v params="$LIVE_PARAMS" -v try="$TRY_TITLE" -v ram="$RAM_TITLE" -v inst="$INSTALL_TITLE" '
     function retitle(block, title) { sub(/menuentry "[^"]*"/, "menuentry \"" title "\"", block); return block }
     /^menuentry / { inblock = 1; block = $0 "\n"; next }
     inblock {
@@ -114,6 +119,10 @@ grub_menu() {
         if (block ~ /archisobasedir/ && !done) {
           done = 1
           printf "%s", retitle(block, try)
+          inram = retitle(block, ram)
+          gsub(/--id \047[^\047]*\047/, "--id \047aurora-ram\047", inram)
+          gsub(/copytoram=n/, "copytoram=y", inram)
+          printf "\n%s", inram
           install = retitle(block, inst)
           gsub(/--id \047[^\047]*\047/, "--id \047aurora-install\047", install)
           gsub(/archisobasedir[^\n]*/, "& aurora.install", install)
@@ -134,7 +143,7 @@ done
 if [[ -d "$PROFILE/syslinux" ]]; then
   # Menú BIOS: probar, instalar, reiniciar y apagar (sin voz ni "Boot existing
   # OS", que en una VM o disco vacío deja la máquina colgada).
-  awk -v params="$LIVE_PARAMS" -v try="$TRY_TITLE" -v inst="$INSTALL_TITLE" '
+  awk -v params="$LIVE_PARAMS" -v try="$TRY_TITLE" -v ram="$RAM_TITLE" -v inst="$INSTALL_TITLE" '
     BEGIN { RS = ""; ORS = "\n\n" }
     /LABEL [^\n]*speech/ { next }
     /\nAPPEND / && !done {
@@ -143,6 +152,11 @@ if [[ -d "$PROFILE/syslinux" ]]; then
       main = $0
       sub(/MENU LABEL [^\n]*/, "MENU LABEL " try, main)
       print main
+      inram = $0
+      sub(/LABEL [^\n]*/, "LABEL auroraram", inram)
+      sub(/MENU LABEL [^\n]*/, "MENU LABEL " ram, inram)
+      gsub(/copytoram=n/, "copytoram=y", inram)
+      print inram
       install = $0
       sub(/LABEL [^\n]*/, "LABEL aurorainstall", install)
       sub(/MENU LABEL [^\n]*/, "MENU LABEL " inst, install)
@@ -170,6 +184,7 @@ for menu in "$PROFILE"/efiboot/loader/entries "$PROFILE"/grub/grub.cfg "$PROFILE
   [[ -e "$menu" ]] || continue
   grep -rq "aurora.install" "$menu" || die "el menú de arranque $menu no quedó con la opción Instalar"
   grep -rq "copytoram=n" "$menu" || die "el menú de arranque $menu no quedó con los parámetros del live"
+  grep -rq "copytoram=y" "$menu" || die "el menú de arranque $menu no quedó con la opción en memoria"
   log "Menú $menu:"
   grep -rhE "^(title|menuentry|MENU LABEL)|aurora.install" "$menu" | sed 's/^/    /' || true
 done

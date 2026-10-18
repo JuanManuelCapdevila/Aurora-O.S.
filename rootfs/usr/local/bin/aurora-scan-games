@@ -11,6 +11,26 @@ set -uo pipefail
 
 pause() { [[ "${1:-}" == "--pause" ]] && read -rp $'\nPresioná Enter para volver...' _; }
 
+# En "Probar Aurora" el sistema se lee del USB de arranque: si se sacó (por
+# ejemplo para conectar el de los juegos), ningún programa se puede abrir.
+# Se revisa solo con comandos internos de bash, que siguen funcionando.
+boot_media_missing() {
+  [[ -d /run/archiso && ! -d /run/archiso/copytoram ]] || return 1
+  local dev mnt _
+  while read -r dev mnt _; do
+    [[ "$mnt" == /run/archiso/bootmnt ]] && { [[ -b "$dev" ]] && return 1 || return 0; }
+  done </proc/mounts
+  return 1
+}
+if boot_media_missing; then
+  echo "Se desconectó el USB de Aurora."
+  echo "En el modo \"Probar Aurora\" el sistema se lee de ese USB y no se puede sacar."
+  echo "Volvé a conectarlo y reiniciá. Para usar otro USB con juegos, arrancá con"
+  echo "\"Probar Aurora en memoria\" o instalá Aurora en la microSD o el SSD."
+  pause "${1:-}"
+  exit 1
+fi
+
 echo "Montando tarjetas y memorias USB..."
 # Lee un campo de una línea de `lsblk -P` (KEY="valor"). El ancla evita que
 # TYPE coincida dentro de FSTYPE.
@@ -35,7 +55,7 @@ done < <(lsblk -Ppno NAME,TYPE,RM,HOTPLUG,FSTYPE,MOUNTPOINT)
 shopt -s nullglob
 JUEGOS='[Jj][Uu][Ee][Gg][Oo][Ss]'
 # shellcheck disable=SC2206  # el patrón tiene que expandirse como glob
-dirs=(/run/media/"$(id -un)"/*/$JUEGOS/*/ "$HOME"/$JUEGOS/*/)
+dirs=(/run/media/"${USER:-$(id -un)}"/*/$JUEGOS/*/ "$HOME"/$JUEGOS/*/)
 
 if ((${#dirs[@]} == 0)); then
   echo

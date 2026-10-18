@@ -791,6 +791,13 @@ class ScanView(TaskView):
     title, accent, glyph = "Buscar juegos", (76, 175, 80), "search"
     intro = ("Copiá cada juego en su propia carpeta dentro de una carpeta «Juegos» en la raíz de la "
              "microSD o de un USB, conectala y elegí Buscar.")
+
+    def __init__(self, app):
+        super().__init__(app)
+        # En "Probar Aurora" (sin copiar a la RAM) el USB de arranque no se puede sacar.
+        if os.path.isdir("/run/archiso") and not os.path.isdir("/run/archiso/copytoram"):
+            self.intro += (" Ojo: en este modo no saques el USB de Aurora; para usar otro USB arrancá con "
+                           "«Probar Aurora en memoria».")
     button = "Buscar juegos"
     help = (("A", "Buscar"), ("B", "Volver"))
 

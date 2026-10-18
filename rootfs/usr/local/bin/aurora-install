@@ -19,7 +19,7 @@ fail() { clear; echo "Error: $*" >&2; read -rp $'\nPresioná Enter para salir...
 
 [[ $EUID -eq 0 ]] || exec sudo "$0" "$@"
 command -v dialog >/dev/null || fail "falta dialog"
-if [[ ! -d "$BOOTMNT" ]]; then
+if [[ ! -d /run/archiso ]]; then
   msg "Aurora ya está instalado: este instalador solo funciona arrancando desde el USB."
   exit 0
 fi
@@ -103,8 +103,12 @@ done
   install -Dm644 /home/player/.local/state/aurora/proton-status "$TARGET/home/player/.local/state/aurora/proton-status"
 chown -R --reference="$TARGET/home/player" "$TARGET/home/player/.local" "$TARGET/home/player/Games" 2>/dev/null || true
 
-# Kernel y microcódigo desde el medio de arranque.
-cp -f "$(find "$BOOTMNT" -name 'vmlinuz-linux' | head -n1)" "$TARGET/boot/vmlinuz-linux"
+# Kernel: el del paquete linux de la imagen, que coincide con sus módulos y
+# está también cuando se arrancó cargando todo en RAM (sin el USB montado).
+KERNEL="$(find "$TARGET/usr/lib/modules" -mindepth 2 -maxdepth 2 -name vmlinuz | sort -V | tail -n1)"
+[[ -n "$KERNEL" ]] || KERNEL="$(find "$BOOTMNT" -name 'vmlinuz-linux' 2>/dev/null | head -n1)"
+[[ -n "$KERNEL" ]] || fail "no se encontró el kernel para instalar"
+cp -f "$KERNEL" "$TARGET/boot/vmlinuz-linux"
 
 # El initramfs del live arranca desde el ISO: se reemplaza por uno normal.
 rm -f "$TARGET/etc/mkinitcpio.conf.d/archiso.conf"

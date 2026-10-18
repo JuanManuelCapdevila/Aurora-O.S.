@@ -50,6 +50,9 @@ la última versión de la rama principal en el pre-release
 3. El menú de arranque ofrece, como Ubuntu:
    - **Probar Aurora (sin instalar)**: modo live, ES-DE directo, sin tocar el SSD ni Windows. Los cambios se
      pierden al apagar.
+   - **Probar Aurora en memoria**: igual, pero copia el sistema a la RAM al arrancar (tarda un poco más). Después
+     se puede sacar el USB, por ejemplo para conectar el de los juegos. En el modo normal el USB de Aurora no se
+     puede sacar: el sistema se lee de ahí.
    - **Instalar Aurora**: abre directo el instalador (microSD o SSD). Una vez instalado, la opción de instalar
      desaparece de Ajustes.
 4. En **Ajustes** (pantalla de inicio) están las vistas gráficas, manejables con el control:
