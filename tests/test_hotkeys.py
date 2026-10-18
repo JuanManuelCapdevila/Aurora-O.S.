@@ -19,7 +19,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-ecodes = types.SimpleNamespace(BTN_SELECT=314, BTN_START=315, BTN_MODE=316, BTN_SOUTH=304, EV_KEY=1)
+ecodes = types.SimpleNamespace(BTN_SELECT=314, BTN_START=315, BTN_MODE=316, BTN_SOUTH=304, EV_KEY=1,
+                               KEY_LEFTMETA=125, KEY_G=34)
 sys.modules.setdefault("evdev", types.SimpleNamespace(ecodes=ecodes))
 sys.modules.setdefault("evdev.ecodes", ecodes)
 loader = importlib.machinery.SourceFileLoader("hotkeys", str(ROOT / "rootfs/usr/local/bin/aurora-hotkeys"))
@@ -62,6 +63,11 @@ class ComboTest(unittest.TestCase):
         self.assertIsNone(c.tick(5.0))
         c.feed(e.BTN_START, 0)
         self.assertIsNone(c.tick(5.1))
+
+    def test_boton_windows_de_la_win600_abre_el_menu(self):
+        c = hotkeys.Combo()
+        self.assertIsNone(c.feed(e.KEY_LEFTMETA, 1))
+        self.assertEqual(c.feed(e.KEY_G, 1), "menu")
 
     def test_boton_guia_abre_el_menu(self):
         self.assertEqual(hotkeys.Combo().feed(e.BTN_MODE, 1), "menu")

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Atajos del control mientras corre un juego.
 
-- Select + Start (o el botón Guía): pausa el juego y abre el menú rápido
-  (aurora-settings quickmenu): volumen, brillo, energía y cerrar juego.
+- Select + Start, el botón Guía o el botón con el logo de Windows de la Win600:
+  pausa el juego y abre el menú rápido (aurora-settings quickmenu): volumen,
+  brillo, energía y cerrar juego.
 - Select + Start mantenidos 2 segundos: cierra el juego sin preguntar (para
   cuando se colgó).
 
@@ -31,6 +32,10 @@ STATE = os.path.join(
     os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "aurora", "running-game.json"
 )
 COMBO = {e.BTN_SELECT, e.BTN_START}
+# Los botones extra de la Win600 no son del control: llegan por el teclado
+# interno como combinaciones de teclas. El del logo de Windows manda Win+G.
+WIN600_KEYBOARD = "AT Translated Set 2 keyboard"
+WIN_BUTTON = {e.KEY_LEFTMETA, e.KEY_G}
 HOLD_TO_CLOSE = 2.0
 RESCAN_EVERY = 3.0
 CLOSE_GRACE = 4.0
@@ -132,6 +137,8 @@ def open_menu(game):
 
 def is_pad(dev):
     keys = dev.capabilities().get(e.EV_KEY, [])
+    if dev.name == WIN600_KEYBOARD:
+        return WIN_BUTTON <= set(keys)
     return e.BTN_SOUTH in keys and (COMBO <= set(keys) or e.BTN_MODE in keys) and dev.name != "aurora-padkeys"
 
 
@@ -185,7 +192,7 @@ class Combo:
         """Un evento de botón (value 1 = apretado, 0 = suelto)."""
         if value == 1:
             self.held.add(code)
-            return "menu" if code == e.BTN_MODE else None
+            return "menu" if code == e.BTN_MODE or (code in WIN_BUTTON and WIN_BUTTON <= self.held) else None
         self.held.discard(code)
         return None
 

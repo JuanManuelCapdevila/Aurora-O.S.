@@ -57,6 +57,7 @@ o = int.from_bytes(d[0x20E:0x210], "little") + 0x200
 print(d[o:o + 64].split(b" ")[0].decode())' "$img")" = "$(uname -r)" ]
 }
 check "versión del kernel leída del bzImage" kernel_header_ok
+check "driver del control XInput (xpad)" modinfo -n xpad
 check "greetd habilitado" systemctl is-enabled greetd.service
 check "NetworkManager activo" systemctl is-active NetworkManager.service
 check "sesión de greetd" grep -q 'user = "player"' /etc/greetd/config.toml

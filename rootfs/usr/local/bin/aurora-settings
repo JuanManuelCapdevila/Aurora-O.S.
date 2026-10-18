@@ -991,27 +991,49 @@ class InputTestView(View):
         except ImportError:
             self.error = "Falta python-evdev."
             return
-        devs = {}
-        for path in evdev.list_devices():
-            try:
-                dev = evdev.InputDevice(path)
-            except OSError:
-                continue
-            devs[dev.fd] = dev
-            info = (dev.name, self.kind(dev, e), path)
-            self.devices.append(info)
-            self._write(f"dispositivo: {info[0]} [{info[1]}] {path} {dev.info}")
+        devs = {}  # fd -> dispositivo
+        buckets = {}  # (ruta, eje) -> -1, 0 o 1 (para no listar cada movimiento del stick)
+        next_scan = 0.0
+
+        def scan():
+            # Se repite cada segundo: al mover el interruptor de modo de la
+            # Win600 el control se desconecta y aparece otro.
+            known = {d.path for d in devs.values()}
+            for path in evdev.list_devices():
+                if path in known:
+                    continue
+                try:
+                    dev = evdev.InputDevice(path)
+                except OSError:
+                    continue
+                devs[dev.fd] = dev
+                info = (dev.name, self.kind(dev, e), path)
+                with self.lock:
+                    self.devices.append(info)
+                self._write(f"dispositivo: {info[0]} [{info[1]}] {path} {dev.info} {dev.phys}")
+                if next_scan:
+                    self.on_event(dev, "conectado", None, None)
+
+        def drop(fd):
+            dev = devs.pop(fd)
+            with self.lock:
+                self.devices = [d for d in self.devices if d[2] != dev.path]
+            self.on_event(dev, "desconectado", None, None)
+
+        scan()
         if not devs:
             self.error = "No se pudo abrir ningún dispositivo de entrada (¿grupo input?)."
-            return
         while self.app.running:
+            if time.monotonic() >= next_scan:
+                scan()
+                next_scan = time.monotonic() + 1.0
             ready, _, _ = select.select(list(devs), [], [], 0.2)
             for fd in ready:
                 dev = devs[fd]
                 try:
                     events = list(dev.read())
                 except OSError:
-                    del devs[fd]
+                    drop(fd)
                     continue
                 for ev in events:
                     if ev.type == e.EV_KEY and ev.value in (0, 1):
@@ -1020,6 +1042,22 @@ class InputTestView(View):
                         self.on_event(dev, f"{name} {'apretado' if ev.value else 'suelto'}", (dev.path, ev.code), ev.value)
                     elif ev.type == e.EV_ABS and ev.code in (e.ABS_HAT0X, e.ABS_HAT0Y) and ev.value:
                         self.on_event(dev, f"{e.ABS[ev.code]} {ev.value:+d}", None, None)
+                    elif ev.type == e.EV_ABS and ev.code in (e.ABS_X, e.ABS_Y, e.ABS_RX, e.ABS_RY, e.ABS_Z, e.ABS_RZ,
+                                                              e.ABS_GAS, e.ABS_BRAKE):
+                        # Sticks y gatillos: solo cuando cruzan el 60 % del recorrido.
+                        info = dev.absinfo(ev.code)
+                        span = (info.max - info.min) or 1
+                        if info.min < 0:
+                            pos = (ev.value - (info.max + info.min) / 2) / (span / 2)
+                        else:
+                            pos = (ev.value - info.min) / span
+                        bucket = 1 if pos > 0.6 else -1 if pos < -0.6 else 0
+                        if buckets.get((dev.path, ev.code), 0) != bucket:
+                            buckets[(dev.path, ev.code)] = bucket
+                            where = {1: "+", -1: "-", 0: "centro"}[bucket]
+                            axis = e.ABS[ev.code]
+                            axis = axis[0] if isinstance(axis, list) else axis
+                            self.on_event(dev, f"{axis} {where}", None, None)
                     elif ev.type == e.EV_REL and ev.code in (e.REL_X, e.REL_Y):
                         self.last_input = time.monotonic()  # el mouse se mueve: no cuenta como evento
 
@@ -1057,7 +1095,9 @@ class InputTestView(View):
         rounded(surf, CARD, (80, 108, 470, 520), 18)
         text(surf, "Dispositivos", (110, 128), 24, medium=True)
         y = 170
-        for name, kind, _path in self.devices[:12]:
+        with self.lock:
+            devices = list(self.devices)
+        for name, kind, _path in devices[:12]:
             text(surf, kind, (110, y), 20, OK if kind == "control" else TEXT_DIM, medium=True)
             text(surf, name, (210, y), 20, max_width=320)
             y += 36
