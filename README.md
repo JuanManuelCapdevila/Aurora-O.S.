@@ -55,7 +55,7 @@ la última versión de la rama principal en el pre-release
    - *Buscar juegos*: registra cada carpeta dentro de `Juegos/` en la raíz de la microSD o un USB.
    - *Hardware*: resumen del hardware de la consola.
    - *Actualizar*: instala la última versión de Aurora sin regrabar el USB (ver abajo).
-   - *Instalar Aurora*: en la **microSD** (Windows queda intacto) o en el SSD interno (lo borra).
+   - *Instalar Aurora* (solo desde el USB): en la **microSD** (Windows queda intacto) o en el SSD interno (lo borra).
    Las entradas de Ajustes no cuentan como juegos ni aparecen en *Todos*.
 5. Durante un juego:
    - **Select + Start** (o el botón Guía) pausa el juego y abre el **menú rápido**: volver al juego, volumen,

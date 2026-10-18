@@ -18,6 +18,8 @@ function setup() {
       esdeDir: path.join(root, 'ES-DE'),
       auroraBin: '/usr/local/bin/aurora',
       toolsDir: '/usr/share/aurora/tools',
+      menuDir: path.join(root, 'ajustes'),
+      live: false,
     },
   };
 }
@@ -57,7 +59,7 @@ test('export-esde crea un archivo por juego, el sistema y limpia los viejos', ()
   assert.ok(fs.existsSync(path.join(romDir, 'otro.txt')));
   const xml = fs.readFileSync(r.systems.file, 'utf8');
   assert.match(xml, /<command label="Aurora">\/usr\/local\/bin\/aurora launch-rom %ROM%<\/command>/);
-  assert.match(xml, /<path>\/usr\/share\/aurora\/tools<\/path>/);
+  assert.ok(xml.includes(`<path>${path.join(root, 'ajustes')}</path>`));
   assert.match(xml, /<fullname>Juegos<\/fullname>/);
   assert.match(xml, /<theme>aurora<\/theme>/);
 
@@ -150,4 +152,33 @@ test('export-esde escribe la lista de Ajustes ordenada y fuera del contador de j
   assert.match(xml, /<sortname>01 Wi-Fi<\/sortname>[\s\S]*<sortname>02 Energía<\/sortname>/);
   assert.match(xml, /Redes &#38; más/);
   assert.doesNotMatch(xml, /Fantasma/);
+});
+
+test('Ajustes muestra el instalador solo en el live y el menú solo tiene enlaces visibles', () => {
+  const { root, system } = setup();
+  system.toolsDir = path.join(root, 'tools');
+  for (const name of ['Wi-Fi', 'Instalar Aurora']) writeFile(path.join(system.toolsDir, `${name}.sh`), '#!/bin/sh');
+  writeFile(
+    path.join(system.toolsDir, 'tools.json'),
+    JSON.stringify({
+      tools: [
+        { file: 'Wi-Fi', name: 'Wi-Fi' },
+        { file: 'Instalar Aurora', only: 'live', name: 'Instalar Aurora' },
+      ],
+    }),
+  );
+  const menu = () => fs.readdirSync(system.menuDir).sort();
+
+  system.live = true;
+  let xml = fs.readFileSync(exportEsde(system).tools, 'utf8');
+  assert.deepEqual(menu(), ['Instalar Aurora.sh', 'Wi-Fi.sh']);
+  assert.match(xml, /Instalar Aurora/);
+  assert.equal(fs.readlinkSync(path.join(system.menuDir, 'Wi-Fi.sh')), path.join(system.toolsDir, 'Wi-Fi.sh'));
+
+  // Ya instalado: el instalador desaparece del menú y de la lista.
+  system.live = false;
+  writeFile(path.join(system.menuDir, 'nota.txt'), 'del usuario');
+  xml = fs.readFileSync(exportEsde(system).tools, 'utf8');
+  assert.deepEqual(menu(), ['Wi-Fi.sh', 'nota.txt']);
+  assert.doesNotMatch(xml, /Instalar Aurora/);
 });

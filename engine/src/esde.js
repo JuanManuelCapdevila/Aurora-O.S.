@@ -9,14 +9,15 @@ const { listGames } = require('./library');
 // contenido es el ID del juego. ES-DE lo muestra (y scrapea carátulas) por el
 // nombre del archivo y al elegirlo ejecuta `aurora launch-rom <archivo>`.
 // Un segundo sistema, "Ajustes", muestra los scripts de toolsDir (Wi-Fi, buscar
-// juegos, instalar, energía). El tema aurora-material y los íconos de las
+// juegos, instalar, energía) a través de menuDir, una carpeta con enlaces solo a
+// las entradas que corresponden (ej. "Instalar Aurora" solo en el live). El tema aurora-material y los íconos de las
 // herramientas se enlazan desde esdeAssetsDir (los genera theme/build.mjs).
 
 const SYSTEM_NAME = 'windows';
 const ROM_EXT = '.aurora';
 const MARKER = '<!-- Generado por Aurora: aurora export-esde. Se sobrescribe en cada exportación. -->';
 
-function esSystemsXml(auroraBin, toolsDir) {
+function esSystemsXml(auroraBin, menuDir) {
   return `<?xml version="1.0"?>
 ${MARKER}
 <systemList>
@@ -32,7 +33,7 @@ ${MARKER}
   <system>
     <name>aurora</name>
     <fullname>Ajustes</fullname>
-    <path>${toolsDir}</path>
+    <path>${menuDir}</path>
     <extension>.sh</extension>
     <command label="Aurora">/usr/bin/bash %ROM%</command>
     <platform>ignore</platform>
@@ -58,7 +59,7 @@ function writeEsSystems(system) {
     return { file, written: false, reason: 'ya existe un es_systems.xml propio; agregar el sistema a mano' };
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, esSystemsXml(system.auroraBin, system.toolsDir));
+  fs.writeFileSync(file, esSystemsXml(system.auroraBin, system.menuDir));
   return { file, written: true };
 }
 
@@ -66,24 +67,62 @@ function escapeXml(text) {
   return String(text).replace(/[<>&"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+// ¿Corre desde el USB (live)? archiso monta ahí el medio de arranque.
+function isLive(system) {
+  return system.live ?? fs.existsSync('/run/archiso');
+}
+
+// Entradas de Ajustes que se muestran: las de tools.json con su script, salvo
+// las marcadas "only": "live" cuando Aurora ya está instalado (o al revés con
+// "installed").
+function visibleTools(system) {
+  const manifest = path.join(system.toolsDir || '', 'tools.json');
+  if (!system.toolsDir || !fs.existsSync(manifest)) return null;
+  const live = isLive(system);
+  return JSON.parse(fs.readFileSync(manifest, 'utf8'))
+    .tools.filter((t) => fs.existsSync(path.join(system.toolsDir, `${t.file}.sh`)))
+    .filter((t) => !t.only || t.only === (live ? 'live' : 'installed'));
+}
+
+// menuDir queda con un enlace por entrada visible y nada más.
+function syncToolsMenu(system, tools) {
+  fs.mkdirSync(system.menuDir, { recursive: true });
+  const wanted = new Set(tools.map((t) => `${t.file}.sh`));
+  for (const entry of fs.readdirSync(system.menuDir)) {
+    const file = path.join(system.menuDir, entry);
+    if (!wanted.has(entry) && fs.lstatSync(file).isSymbolicLink()) fs.unlinkSync(file);
+  }
+  for (const name of wanted) {
+    const link = path.join(system.menuDir, name);
+    const target = path.join(system.toolsDir, name);
+    let current = null;
+    try {
+      current = fs.readlinkSync(link);
+    } catch {
+      // No existe o no es un enlace.
+    }
+    if (current === target) continue;
+    fs.rmSync(link, { force: true });
+    fs.symlinkSync(target, link);
+  }
+}
+
 // Lista de Ajustes para ES-DE: nombre, descripción y orden de cada entrada de
 // tools.json. nogamecount las saca del contador de juegos y de las colecciones
 // Todos/Favoritos/Recientes. Se reescribe siempre: estas entradas son de Aurora.
 function writeToolsGamelist(system) {
-  const manifest = path.join(system.toolsDir || '', 'tools.json');
-  if (!system.toolsDir || !fs.existsSync(manifest)) return null;
-  const { tools } = JSON.parse(fs.readFileSync(manifest, 'utf8'));
-  const games = tools
-    .filter((t) => fs.existsSync(path.join(system.toolsDir, `${t.file}.sh`)))
-    .map(
-      (t, i) => `  <game>
+  const tools = visibleTools(system);
+  if (!tools) return null;
+  syncToolsMenu(system, tools);
+  const games = tools.map(
+    (t, i) => `  <game>
     <path>./${escapeXml(t.file)}.sh</path>
     <name>${escapeXml(t.name)}</name>
     <sortname>${String(i + 1).padStart(2, '0')} ${escapeXml(t.name)}</sortname>
     <desc>${escapeXml(t.desc || '')}</desc>
     <nogamecount>true</nogamecount>
   </game>`,
-    );
+  );
   const file = path.join(system.esdeDir, 'gamelists', 'aurora', 'gamelist.xml');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `<?xml version="1.0"?>\n<gameList>\n${games.join('\n')}\n</gameList>\n`);

@@ -38,6 +38,7 @@ check "aurora export-esde" runuser -u player -- env HOME=/home/player aurora exp
 check "es_systems.xml generado" test -f /home/player/ES-DE/custom_systems/es_systems.xml
 check "herramientas de ES-DE" test -f "/usr/share/aurora/tools/Instalar Aurora.sh"
 check "lista de Ajustes sin contar como juegos" grep -q nogamecount /home/player/ES-DE/gamelists/aurora/gamelist.xml
+check "instalador visible en el live" test -L "/home/player/.local/share/aurora/ajustes/Instalar Aurora.sh"
 check "tema aurora-material" test -f /usr/share/aurora/es-de/themes/aurora-material/theme.xml
 check "íconos de herramientas" test -f /usr/share/aurora/es-de/media/aurora/covers/Terminal.png
 check "tema enlazado en ES-DE" test -f /home/player/ES-DE/themes/aurora-material/theme.xml

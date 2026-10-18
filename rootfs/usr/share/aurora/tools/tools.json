@@ -1,5 +1,5 @@
 {
-  "_comment": "Entradas de Ajustes en ES-DE, en este orden. 'file' es el script de esta carpeta (sin .sh). Todas llevan nogamecount: no se cuentan como juegos ni aparecen en Todos/Favoritos/Recientes.",
+  "_comment": "Entradas de Ajustes en ES-DE, en este orden. 'file' es el script de esta carpeta (sin .sh). Todas llevan nogamecount: no se cuentan como juegos ni aparecen en Todos/Favoritos/Recientes. 'only': 'live' o 'installed' la muestra solo desde el USB o solo instalado.",
   "tools": [
     { "file": "Wi-Fi", "name": "Wi-Fi", "desc": "Buscar redes y conectarse." },
     { "file": "Energía", "name": "Energía", "desc": "Modo batería, equilibrado o rendimiento." },
@@ -8,7 +8,7 @@
     { "file": "Hardware", "name": "Hardware", "desc": "Resumen del hardware de la consola." },
     { "file": "Probar control", "name": "Probar control", "desc": "Ver qué manda cada botón (para diagnosticar el control)." },
     { "file": "Actualizar", "name": "Actualizar", "desc": "Instalar la última versión de Aurora sin regrabar el USB." },
-    { "file": "Instalar Aurora", "name": "Instalar Aurora", "desc": "Instalar en la microSD o el SSD (borra el disco elegido)." },
+    { "file": "Instalar Aurora", "only": "live", "name": "Instalar Aurora", "desc": "Instalar en la microSD o el SSD (borra el disco elegido)." },
     { "file": "Terminal", "name": "Terminal", "desc": "Consola de comandos (avanzado)." }
   ]
 }
