@@ -25,6 +25,22 @@ aurora power "${POWER_MODE:-balanced}" || true
 # Mantiene la lista de juegos de ES-DE al día con la biblioteca.
 aurora export-esde || true
 
+# Proton se descarga solo la primera vez que hay Internet (en segundo plano).
+aurora-proton-auto &
+
+# Opción "Instalar Aurora" del menú de arranque del USB: abre el instalador
+# antes que la interfaz. Si se cancela, sigue el modo live normal.
+if [ -d /run/archiso ] && grep -qw aurora.install /proc/cmdline; then
+  echo "=== $(date '+%F %T') instalador (aurora.install)"
+  INSTALLER='aurora-display apply; exec aurora-tool sudo aurora-install'
+  start=$(date +%s)
+  # Si cage no pudo arrancar (sin aceleración 3D) se reintenta con software;
+  # si el usuario canceló el instalador, no.
+  if ! cage -s -- sh -c "$INSTALLER" && [ $(($(date +%s) - start)) -lt 5 ]; then
+    WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 cage -s -- sh -c "$INSTALLER" || true
+  fi
+fi
+
 # Ajustes → Buscar juegos deja este archivo para pedir que ES-DE se reabra y
 # lea los juegos nuevos.
 RESTART_FLAG="$LOG_DIR/restart-frontend"

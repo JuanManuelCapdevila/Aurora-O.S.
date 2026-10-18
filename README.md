@@ -47,11 +47,16 @@ la última versión de la rama principal en el pre-release
 1. Descargar `aurora-<fecha>-x86_64.iso` y grabarlo en un USB de 4 GB o más con balenaEtcher, Rufus (modo DD),
    Ventoy o `dd`.
 2. En la Win600: **desactivar Secure Boot** en el BIOS y arrancar desde el USB (con un hub USB-C).
-3. Arranca en modo **live**: ES-DE directo, sin tocar el SSD ni Windows. Los cambios se pierden al apagar.
+3. El menú de arranque ofrece, como Ubuntu:
+   - **Probar Aurora (sin instalar)**: modo live, ES-DE directo, sin tocar el SSD ni Windows. Los cambios se
+     pierden al apagar.
+   - **Instalar Aurora**: abre directo el instalador (microSD o SSD). Una vez instalado, la opción de instalar
+     desaparece de Ajustes.
 4. En **Ajustes** (pantalla de inicio) están las vistas gráficas, manejables con el control:
    - *Wi-Fi*: busca redes y pide la clave con un teclado en pantalla.
    - *Energía*: modo batería, equilibrado o rendimiento (se recuerda entre reinicios).
-   - *Proton*: lo descarga o actualiza (~1,5 GB) para los juegos de Windows.
+   - *Proton*: se descarga solo (~1,5 GB) en segundo plano la primera vez que hay Wi-Fi; esta vista muestra el
+     estado y permite forzar la actualización. Si se descargó en el live, el instalador lo copia.
    - *Buscar juegos*: registra cada carpeta dentro de `Juegos/` en la raíz de la microSD o un USB.
    - *Hardware*: resumen del hardware de la consola.
    - *Actualizar*: instala la última versión de Aurora sin regrabar el USB (ver abajo).

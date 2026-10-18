@@ -82,22 +82,77 @@ RELENG=/usr/share/archiso/configs/releng
 for dir in efiboot syslinux grub; do
   [[ -d "$RELENG/$dir" ]] && cp -a "$RELENG/$dir" "$PROFILE/"
 done
+# Menús de arranque como Ubuntu: "Probar Aurora" (live) e "Instalar Aurora"
+# (arranca directo al instalador, con aurora.install). Se arman para los tres
+# cargadores que puede usar el ISO: systemd-boot y GRUB (UEFI) y syslinux (BIOS).
+LIVE_PARAMS="cow_spacesize=4G copytoram=n $KERNEL_PARAMS"
+TRY_TITLE="Probar Aurora (sin instalar)"
+INSTALL_TITLE="Instalar Aurora"
+
 if [[ -d "$PROFILE/efiboot/loader/entries" ]]; then
-  # Solo la entrada principal de arranque (sin voz, memtest ni shell UEFI).
+  # Solo la entrada principal (sin voz, memtest ni shell UEFI) y una copia para instalar.
   find "$PROFILE/efiboot/loader/entries" -type f ! -name '01-*' -delete
-  sed -i 's/^timeout .*/timeout 3/' "$PROFILE/efiboot/loader/loader.conf"
-  # Más espacio para escribir en el live (la RAM se usa solo si hace falta) y sin
-  # copiar la imagen entera a la RAM al arrancar (tarda minutos y ocupa ~2 GB).
-  sed -i "/^options/ s/\$/ cow_spacesize=4G copytoram=n $KERNEL_PARAMS/" "$PROFILE"/efiboot/loader/entries/01-*.conf
+  sed -i 's/^timeout .*/timeout 5/' "$PROFILE/efiboot/loader/loader.conf"
+  main="$(find "$PROFILE/efiboot/loader/entries" -name '01-*.conf' | head -n1)"
+  sed -i -e "/^options/ s/\$/ $LIVE_PARAMS/" -e "s/^title .*/title    $TRY_TITLE/" "$main"
+  sed -e "/^options/ s/\$/ aurora.install/" -e "s/^title .*/title    $INSTALL_TITLE/" -e "s/^sort-key .*/sort-key 02/" \
+    "$main" > "$PROFILE/efiboot/loader/entries/02-aurora-install.conf"
 fi
 
+# GRUB: cada "menuentry ... { ... }" de arranque del live queda como "Probar" y
+# se duplica como "Instalar"; se quitan las entradas con voz (speech).
+grub_menu() {
+  awk -v params="$LIVE_PARAMS" -v try="$TRY_TITLE" -v inst="$INSTALL_TITLE" '
+    function retitle(block, title) { sub(/menuentry "[^"]*"/, "menuentry \"" title "\"", block); return block }
+    /^menuentry / { inblock = 1; block = $0 "\n"; next }
+    inblock {
+      if ($1 ~ /^linux/ && $0 ~ /archisobasedir/) $0 = $0 " " params
+      block = block $0 "\n"
+      if ($0 ~ /^}/) {
+        inblock = 0
+        if (block ~ /speech/) next
+        if (block ~ /archisobasedir/ && !done) {
+          done = 1
+          printf "%s", retitle(block, try)
+          install = retitle(block, inst)
+          gsub(/--id \047[^\047]*\047/, "--id \047aurora-install\047", install)
+          gsub(/archisobasedir[^\n]*/, "& aurora.install", install)
+          printf "\n%s", install
+        } else if (block !~ /archisobasedir/) {
+          printf "%s", block
+        }
+      }
+      next
+    }
+    { print }
+  ' "$1" > "$1.new" && mv "$1.new" "$1"
+}
+for cfg in "$PROFILE/grub/grub.cfg" "$PROFILE/grub/loopback.cfg"; do
+  [[ -f "$cfg" ]] && grub_menu "$cfg"
+done
+
 if [[ -d "$PROFILE/syslinux" ]]; then
-  # Menú BIOS: solo arrancar Aurora, reiniciar y apagar (sin "Boot existing OS",
-  # que en una VM o disco vacío deja la máquina colgada).
-  awk 'BEGIN { RS=""; ORS="\n\n" } !/LABEL [^\n]*speech/' "$PROFILE/syslinux/archiso_sys-linux.cfg" \
-    > "$PROFILE/syslinux/archiso_sys-linux.cfg.new"
+  # Menú BIOS: probar, instalar, reiniciar y apagar (sin voz ni "Boot existing
+  # OS", que en una VM o disco vacío deja la máquina colgada).
+  awk -v params="$LIVE_PARAMS" -v try="$TRY_TITLE" -v inst="$INSTALL_TITLE" '
+    BEGIN { RS = ""; ORS = "\n\n" }
+    /LABEL [^\n]*speech/ { next }
+    /\nAPPEND / && !done {
+      done = 1
+      gsub(/\nAPPEND [^\n]*/, "& " params)
+      main = $0
+      sub(/MENU LABEL [^\n]*/, "MENU LABEL " try, main)
+      print main
+      install = $0
+      sub(/LABEL [^\n]*/, "LABEL aurorainstall", install)
+      sub(/MENU LABEL [^\n]*/, "MENU LABEL " inst, install)
+      gsub(/\nAPPEND [^\n]*/, "& aurora.install", install)
+      print install
+      next
+    }
+    { print }
+  ' "$PROFILE/syslinux/archiso_sys-linux.cfg" > "$PROFILE/syslinux/archiso_sys-linux.cfg.new"
   mv "$PROFILE/syslinux/archiso_sys-linux.cfg.new" "$PROFILE/syslinux/archiso_sys-linux.cfg"
-  sed -i "/^APPEND/ s/\$/ cow_spacesize=4G copytoram=n $KERNEL_PARAMS/" "$PROFILE/syslinux/archiso_sys-linux.cfg"
   cat > "$PROFILE/syslinux/archiso_tail.cfg" <<'CFG'
 LABEL reboot
 MENU LABEL Reiniciar
@@ -108,6 +163,16 @@ MENU LABEL Apagar
 COM32 poweroff.c32
 CFG
 fi
+
+# Cada menú que exista tiene que ofrecer instalar (si releng cambia de formato,
+# mejor que falle la construcción y no un ISO sin la opción).
+for menu in "$PROFILE"/efiboot/loader/entries "$PROFILE"/grub/grub.cfg "$PROFILE"/syslinux/archiso_sys-linux.cfg; do
+  [[ -e "$menu" ]] || continue
+  grep -rq "aurora.install" "$menu" || die "el menú de arranque $menu no quedó con la opción Instalar"
+  grep -rq "copytoram=n" "$menu" || die "el menú de arranque $menu no quedó con los parámetros del live"
+  log "Menú $menu:"
+  grep -rhE "^(title|menuentry|MENU LABEL)|aurora.install" "$menu" | sed 's/^/    /' || true
+done
 # Textos de los menús: Aurora en lugar de Arch Linux.
 find "$PROFILE" \( -name '*.cfg' -o -name '*.conf' \) -exec \
   sed -i -e 's/Arch Linux install medium/Aurora O.S. (live)/g' -e 's/Arch Linux/Aurora O.S./g' {} +

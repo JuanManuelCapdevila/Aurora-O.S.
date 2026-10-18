@@ -3,7 +3,7 @@
   "tools": [
     { "file": "Wi-Fi", "name": "Wi-Fi", "desc": "Buscar redes y conectarse." },
     { "file": "Energía", "name": "Energía", "desc": "Modo batería, equilibrado o rendimiento." },
-    { "file": "Proton", "name": "Proton", "desc": "Descargar o actualizar Proton para los juegos de Windows." },
+    { "file": "Proton", "name": "Proton", "desc": "Estado de Proton (se descarga solo con Wi-Fi) y actualizarlo." },
     { "file": "Buscar juegos", "name": "Buscar juegos", "desc": "Agregar los juegos de la carpeta Juegos de la microSD o un USB." },
     { "file": "Hardware", "name": "Hardware", "desc": "Resumen del hardware de la consola." },
     { "file": "Probar control", "name": "Probar control", "desc": "Ver qué manda cada botón (para diagnosticar el control)." },

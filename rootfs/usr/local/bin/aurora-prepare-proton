@@ -1,20 +1,45 @@
 #!/usr/bin/env bash
 # Descarga Proton-GE y el runtime de Steam que usa umu (aprox. 1,5 GB) creando
 # un prefijo de prueba. Así el primer juego no tiene que esperar la descarga y
-# se verifica que Proton arranca en la consola.
+# se verifica que Proton arranca en la consola. Lo corre solo aurora-proton-auto
+# y también Ajustes → Proton.
+#
+# Uso: aurora-prepare-proton [--no-pause | --check]
+#   --check  sale con 0 si Proton ya está instalado (no descarga nada)
 
 set -uo pipefail
 
 export GAMEID=umu-default
 export PROTONPATH=GE-Proton
 export WINEPREFIX="$HOME/Games/.proton-check"
+TOOLS="$HOME/.local/share/Steam/compatibilitytools.d"
+
+installed() {
+  compgen -G "$TOOLS/GE-Proton*/proton" >/dev/null && [[ -d "$HOME/.local/share/umu" ]] &&
+    [[ -f "$WINEPREFIX/system.reg" ]]
+}
+
+if [[ "${1:-}" == "--check" ]]; then
+  installed
+  exit
+fi
+
+# Si la descarga automática está en curso, se espera a que termine en lugar de
+# bajar todo dos veces.
+mkdir -p "$HOME/.cache"
+exec 9>"$HOME/.cache/aurora-proton.lock"
+if ! flock -n 9; then
+  echo "Ya hay una descarga de Proton en curso; esperando a que termine..."
+  flock 9
+fi
 
 echo "Descargando Proton-GE y el runtime (puede tardar varios minutos)..."
 ok=0
-umu-run wineboot -u && ok=1
+umu-run wineboot -u && installed && ok=1
 if ((ok)); then
   echo
   echo "Proton listo."
+  mkdir -p "$HOME/.local/state/aurora" && echo listo >"$HOME/.local/state/aurora/proton-status"
 else
   echo
   echo "Falló la preparación de Proton. ¿Hay conexión a Internet?"

@@ -91,6 +91,18 @@ trap 'umount -R "$TARGET" 2>/dev/null || true' EXIT
 # Copia el sistema limpio (la imagen original, no los cambios hechos en el live).
 rsync -aHAX --info=progress2 "$SRC/" "$TARGET/"
 
+# Proton y su runtime, si ya se descargaron en el live: así el sistema
+# instalado no los vuelve a bajar.
+for dir in .local/share/Steam/compatibilitytools.d .local/share/umu Games/.proton-check; do
+  if [[ -d "/home/player/$dir" ]]; then
+    mkdir -p "$TARGET/home/player/$(dirname "$dir")"
+    rsync -aHAX "/home/player/$dir/" "$TARGET/home/player/$dir/" && echo "Copiado ~/$dir"
+  fi
+done
+[[ -f /home/player/.local/state/aurora/proton-status ]] &&
+  install -Dm644 /home/player/.local/state/aurora/proton-status "$TARGET/home/player/.local/state/aurora/proton-status"
+chown -R --reference="$TARGET/home/player" "$TARGET/home/player/.local" "$TARGET/home/player/Games" 2>/dev/null || true
+
 # Kernel y microcódigo desde el medio de arranque.
 cp -f "$(find "$BOOTMNT" -name 'vmlinuz-linux' | head -n1)" "$TARGET/boot/vmlinuz-linux"
 

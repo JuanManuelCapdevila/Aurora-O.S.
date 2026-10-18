@@ -756,9 +756,16 @@ class TaskView(View):
 
 class ProtonView(TaskView):
     title, accent, glyph = "Proton", (156, 39, 176), "download"
-    intro = "Proton permite jugar los juegos de Windows. Se descarga una vez (~1,5 GB) y necesita Wi-Fi."
+    intro = ("Proton permite jugar los juegos de Windows. Se descarga solo (~1,5 GB) la primera vez que hay "
+             "Wi-Fi; desde acá se puede forzar o actualizar.")
     button = "Descargar / actualizar"
     help = (("A", "Descargar"), ("B", "Volver"))
+    AUTO = {
+        "esperando-red": ("se descarga solo al conectarse a Wi-Fi", WARN),
+        "descargando": ("descargándose automáticamente…", WARN),
+        "error": ("la descarga automática falló; se reintenta sola", ERR),
+        "sin-espacio": ("no hay espacio libre para descargarlo", ERR),
+    }
 
     def command(self):
         return ["aurora-prepare-proton", "--no-pause"]
@@ -769,9 +776,15 @@ class ProtonView(TaskView):
             versions = sorted(d for d in os.listdir(base) if d.lower().startswith("ge-proton"))
         except OSError:
             versions = []
-        if versions:
+        try:
+            with open(os.path.expanduser("~/.local/state/aurora/proton-status")) as f:
+                auto = f.read().strip()
+        except OSError:
+            auto = ""
+        if versions and auto != "descargando":
             return [("Instalado:", versions[-1], OK)]
-        return [("Instalado:", "todavía no", WARN)]
+        label, color = self.AUTO.get(auto, ("todavía no", WARN))
+        return [("Instalado:", label, color)]
 
 
 class ScanView(TaskView):

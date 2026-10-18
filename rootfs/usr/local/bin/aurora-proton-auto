@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Descarga Proton sola, en segundo plano, la primera vez que hay Internet: así
+# el primer juego no espera y nadie tiene que acordarse de hacerlo. La arranca
+# aurora-session; termina cuando Proton queda listo.
+#
+# Estado (lo muestra Ajustes → Proton): ~/.local/state/aurora/proton-status
+#   esperando-red | descargando | listo | error
+
+set -uo pipefail
+
+STATE_DIR="$HOME/.local/state/aurora"
+STATUS="$STATE_DIR/proton-status"
+LOG="$STATE_DIR/proton-auto.log"
+NEEDED_KB=$((3 * 1024 * 1024))  # Proton + runtime ocupan ~1,5 GB; se deja margen
+
+mkdir -p "$STATE_DIR"
+status() { echo "$1" >"$STATUS"; }
+
+# Desde el USB solo si sobra lugar (los cambios del live van a la RAM) y nunca
+# mientras se instala.
+grep -qw aurora.install /proc/cmdline 2>/dev/null && exit 0
+# Una sola copia por sesión.
+exec 8>"$STATE_DIR/.proton-auto.lock"
+flock -n 8 || exit 0
+
+wait_time=30
+while :; do
+  if aurora-prepare-proton --check; then
+    status listo
+    exit 0
+  fi
+  free_kb="$(df -Pk "$HOME" | awk 'NR == 2 { print $4 }')"
+  if ((free_kb < NEEDED_KB)); then
+    status sin-espacio
+    exit 0
+  fi
+  if [[ "$(nmcli -t networking connectivity 2>/dev/null)" != full ]]; then
+    status esperando-red
+    sleep 30
+    continue
+  fi
+  status descargando
+  if nice -n 10 aurora-prepare-proton --no-pause >>"$LOG" 2>&1; then
+    status listo
+    exit 0
+  fi
+  # Falló (corte de red, servidor caído): se reintenta cada vez más espaciado.
+  status error
+  sleep "$wait_time"
+  wait_time=$((wait_time < 1800 ? wait_time * 2 : 1800))
+done
