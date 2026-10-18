@@ -167,4 +167,4 @@ jobs:
           for asset in $(gh release view dev --json assets --jq '.assets[].name'); do
             gh release delete-asset dev "$asset" -y
           done
-          gh release upload dev out/*.iso out/SHA256SUMS out/aurora-update.json out/aurora-update.tar.zst out/aurora-update --clobber
+          gh release upload dev out/*.iso out/SHA256SUMS out/aurora-update.json out/aurora-update.tar.zst out/aurora-update out/aurora-rescue --clobber

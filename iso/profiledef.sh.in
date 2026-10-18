@@ -31,6 +31,7 @@ file_permissions=(
   ["/usr/local/bin/aurora-padkeys"]="0:0:755"
   ["/usr/local/bin/aurora-hotkeys"]="0:0:755"
   ["/usr/local/bin/aurora-update"]="0:0:755"
+  ["/usr/local/bin/aurora-rescue"]="0:0:755"
   ["/usr/local/bin/aurora-tool"]="0:0:755"
   ["/usr/local/bin/aurora-selftest"]="0:0:755"
   ["/usr/local/bin/umu-run"]="0:0:755"

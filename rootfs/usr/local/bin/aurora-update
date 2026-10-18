@@ -77,14 +77,44 @@ check_paths() {
   done <"$1"
 }
 
+# Versión del kernel guardada dentro de un bzImage (la que muestra uname -r).
+kernel_version() {
+  python3 - "$1" <<'PY' 2>/dev/null
+import sys
+data = open(sys.argv[1], "rb").read(1 << 16)
+offset = int.from_bytes(data[0x20E:0x210], "little") + 0x200
+print(data[offset:offset + 64].split(b" ")[0].decode(errors="replace"))
+PY
+}
+
+# Después de actualizar el sistema: el kernel de /boot tiene que tener sus
+# módulos. Si no, se copia el instalado y se regenera el initramfs.
+check_kernel() {
+  local boot latest
+  [[ -f /boot/vmlinuz-linux ]] || return 0
+  boot="$(kernel_version /boot/vmlinuz-linux)"
+  [[ -n "$boot" && -d "/usr/lib/modules/$boot" ]] && return 0
+  latest="$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -printf '%f\n' | sort -V | tail -n1)"
+  [[ -f "/usr/lib/modules/$latest/vmlinuz" ]] || fail "el kernel de /boot ($boot) no coincide con los módulos y no hay uno para copiar"
+  say "Sincronizando el kernel de /boot ($boot → $latest)..."
+  install -m644 "/usr/lib/modules/$latest/vmlinuz" /boot/vmlinuz-linux
+  mkinitcpio -P || fail "no se pudo regenerar el initramfs"
+}
+
 install_packages() {
   local manifest="$1" missing aur_missing
   [[ -z "$ROOT" && "${AURORA_SKIP_PACKAGES:-}" != 1 ]] || return 0
   mapfile -t missing < <(jq -r '.packages[]' <<<"$manifest" | xargs -r pacman -T || true)
   if ((${#missing[@]})); then
     say "Paquetes nuevos: ${missing[*]}"
+    # El kernel nuevo se copia a /boot (la partición de arranque): tiene que
+    # estar montada o el sistema queda con kernel y módulos desincronizados.
+    if findmnt -s /boot >/dev/null && ! mountpoint -q /boot; then
+      mount /boot || fail "no se pudo montar /boot; no se actualiza el sistema"
+    fi
     say "Actualizando el sistema e instalándolos (puede tardar)..."
     pacman -Syu --needed --noconfirm "${missing[@]}" || fail "no se pudieron instalar los paquetes nuevos"
+    check_kernel
   fi
   mapfile -t aur_missing < <(jq -r '.aur[]' <<<"$manifest" | xargs -r pacman -T || true)
   if ((${#aur_missing[@]})); then

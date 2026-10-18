@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# Rescate de una instalación de Aurora que no arranca. Se usa desde el USB
+# (modo live): monta el sistema instalado, junta un diagnóstico y ofrece
+# repararlo.
+#
+# Uso: sudo aurora-rescue [diagnostico | reparar | deshacer]
+#   diagnostico  solo muestra y guarda el diagnóstico
+#   reparar      reinstala el kernel en /boot, regenera el initramfs y la
+#                entrada de arranque (necesita Wi-Fi si hay que bajar el kernel)
+#   deshacer     vuelve a la versión de Aurora anterior a la última actualización
+# Sin argumentos muestra un menú.
+
+set -uo pipefail
+
+TARGET=/mnt/aurora-rescue
+REPORT_NAME=aurora-rescate.txt
+
+[[ $EUID -eq 0 ]] || exec sudo "$0" "$@"
+
+say() { printf '%s\n' "$*"; }
+die() {
+  say "Error: $*" >&2
+  exit 1
+}
+
+# Partición con la etiqueta dada en el mismo disco que la raíz instalada.
+find_root() { blkid -L aurora_root 2>/dev/null | head -n1; }
+find_esp() {
+  local root_disk part
+  root_disk="$(lsblk -no PKNAME "$1" 2>/dev/null | head -n1)"
+  for part in $(blkid -t PARTLABEL=AURORA_EFI -o device 2>/dev/null) $(blkid -L AURORA_EFI 2>/dev/null); do
+    [[ "$(lsblk -no PKNAME "$part" 2>/dev/null | head -n1)" == "$root_disk" ]] && { echo "$part"; return; }
+  done
+}
+
+mount_target() {
+  ROOT_DEV="$(find_root)"
+  [[ -n "$ROOT_DEV" ]] || die "no se encontró una instalación de Aurora (partición aurora_root)"
+  ESP_DEV="$(find_esp "$ROOT_DEV")"
+  [[ -n "$ESP_DEV" ]] || die "no se encontró la partición de arranque (AURORA_EFI) junto a $ROOT_DEV"
+  mkdir -p "$TARGET"
+  mountpoint -q "$TARGET" || mount "$ROOT_DEV" "$TARGET" || die "no se pudo montar $ROOT_DEV"
+  mountpoint -q "$TARGET/boot" || mount "$ESP_DEV" "$TARGET/boot" || die "no se pudo montar $ESP_DEV"
+  trap 'umount -R "$TARGET" 2>/dev/null' EXIT
+}
+
+# Versión del kernel guardada dentro de un bzImage (la que muestra uname -r).
+kernel_version() {
+  python3 - "$1" <<'PY' 2>/dev/null
+import sys
+data = open(sys.argv[1], "rb").read(1 << 16)
+offset = int.from_bytes(data[0x20E:0x210], "little") + 0x200
+print(data[offset:offset + 64].split(b" ")[0].decode(errors="replace"))
+PY
+}
+
+diagnose() {
+  local boot_kernel modules
+  say "== Aurora instalado en $ROOT_DEV (arranque en $ESP_DEV)"
+  say "Versión de Aurora: $(cat "$TARGET/etc/aurora/version" 2>/dev/null || echo 'sin aurora-update')"
+  [[ -f "$TARGET/var/lib/aurora/update/rollback.tar.zst" ]] && say "Hay una actualización que se puede deshacer."
+  boot_kernel="$(kernel_version "$TARGET/boot/vmlinuz-linux")"
+  modules="$(find "$TARGET/usr/lib/modules" -mindepth 1 -maxdepth 1 -printf '%f ' 2>/dev/null)"
+  say "Kernel en /boot: ${boot_kernel:-no encontrado}"
+  say "Módulos instalados: ${modules:-ninguno}"
+  if [[ -n "$boot_kernel" && ! -d "$TARGET/usr/lib/modules/$boot_kernel" ]]; then
+    say ">> PROBLEMA: el kernel de /boot no tiene sus módulos (kernel y sistema desincronizados). Usar 'reparar'."
+  fi
+  find "$TARGET/boot" -maxdepth 1 -type f -printf '  %f  %s bytes  %TY-%Tm-%Td %TH:%TM\n' 2>/dev/null
+  say
+  say "== Entrada de arranque"
+  cat "$TARGET/boot/loader/entries/aurora.conf" 2>/dev/null || say "(no existe)"
+  say "kernel-params: $(cat "$TARGET/etc/aurora/kernel-params" 2>/dev/null)"
+  say
+  say "== Últimos cambios de paquetes"
+  grep -E '\[ALPM\] (upgraded|installed|removed) (linux|mesa|systemd|glibc|linux-firmware|mkinitcpio) |error|warning' \
+    "$TARGET/var/log/pacman.log" 2>/dev/null | tail -n 25
+  say
+  say "== Errores del último arranque"
+  journalctl -D "$TARGET/var/log/journal" -b 0 -p err --no-pager 2>/dev/null | tail -n 30
+  say
+  say "== Final del último arranque"
+  journalctl -D "$TARGET/var/log/journal" -b 0 --no-pager 2>/dev/null | tail -n 15
+}
+
+repair() {
+  local partuuid params
+  say "== Reparando el arranque"
+  # Kernel: si el paquete está instalado se copia su vmlinuz a /boot; si sus
+  # archivos no están, se reinstala (necesita Internet).
+  # shellcheck disable=SC2016  # el script se expande dentro del chroot
+  arch-chroot "$TARGET" /bin/bash -c '
+    set -e
+    ver="$(pacman -Q linux | cut -d" " -f2)"
+    kdir="$(ls -d /usr/lib/modules/*/ 2>/dev/null | xargs -n1 basename | sort -V | tail -n1)"
+    if [ -z "$kdir" ] || [ ! -f "/usr/lib/modules/$kdir/vmlinuz" ]; then
+      echo "Reinstalando el kernel (linux $ver)..."
+      pacman -S --noconfirm linux
+      kdir="$(ls -d /usr/lib/modules/*/ | xargs -n1 basename | sort -V | tail -n1)"
+    fi
+    echo "Kernel $kdir"
+    install -m644 "/usr/lib/modules/$kdir/vmlinuz" /boot/vmlinuz-linux
+    mkinitcpio -P
+  ' || die "no se pudo reparar el kernel (¿hay Wi-Fi?)"
+
+  partuuid="$(blkid -s PARTUUID -o value "$ROOT_DEV")"
+  params="$(cat "$TARGET/etc/aurora/kernel-params" 2>/dev/null)"
+  mkdir -p "$TARGET/boot/loader/entries"
+  cat >"$TARGET/boot/loader/entries/aurora.conf" <<EOF
+title   Aurora O.S.
+linux   /vmlinuz-linux
+initrd  /initramfs-linux.img
+options root=PARTUUID=$partuuid rw quiet loglevel=3 $params
+EOF
+  say "Entrada de arranque regenerada."
+  sync
+  say "Listo. Sacá el USB y reiniciá."
+}
+
+undo() {
+  [[ -x "$TARGET/usr/local/bin/aurora-update" ]] || die "esta instalación no tiene aurora-update"
+  AURORA_ROOT="$TARGET" AURORA_SKIP_PACKAGES=1 bash "$TARGET/usr/local/bin/aurora-update" rollback || exit 1
+  sync
+}
+
+[[ -d /run/archiso ]] || die "aurora-rescue se usa arrancando desde el USB de Aurora"
+mount_target
+
+action="${1:-}"
+if [[ -z "$action" ]] && command -v dialog >/dev/null; then
+  action="$(dialog --stdout --title "Rescate de Aurora" --menu \
+    "Aurora instalado en $ROOT_DEV.\n¿Qué hacemos?" 14 66 3 \
+    reparar "Reparar el arranque (kernel, initramfs, entrada)" \
+    deshacer "Deshacer la última actualización de Aurora" \
+    diagnostico "Solo ver el diagnóstico")" || exit 0
+  clear
+fi
+
+REPORT="$TARGET/home/player/$REPORT_NAME"
+case "${action:-diagnostico}" in
+  diagnostico) diagnose 2>&1 | tee "$REPORT" ;;
+  reparar) { diagnose; repair; } 2>&1 | tee "$REPORT" ;;
+  deshacer) { diagnose; undo; } 2>&1 | tee "$REPORT" ;;
+  *) die "acción desconocida: $action (diagnostico | reparar | deshacer)" ;;
+esac
+say
+say "El diagnóstico quedó en /home/player/$REPORT_NAME del sistema instalado."
+[[ -t 0 ]] && read -rp $'\nPresioná Enter para salir...' _

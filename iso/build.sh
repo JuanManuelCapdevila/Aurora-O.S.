@@ -156,7 +156,7 @@ jq -n --arg version "$AURORA_VERSION" \
   '{version: $version, sha256: $sha256, size: $size, file: "aurora-update.tar.zst",
     packages: ($packages | split("\n") | map(select(. != ""))),
     aur: ($aur | split("\n") | map(select(. != "")))}' > "$OUT_DIR/aurora-update.json"
-cp "$REPO_DIR/rootfs/usr/local/bin/aurora-update" "$OUT_DIR/aurora-update"
+cp "$REPO_DIR/rootfs/usr/local/bin/aurora-update" "$REPO_DIR/rootfs/usr/local/bin/aurora-rescue" "$OUT_DIR/"
 # Lista de archivos de esta versión: aurora-update la usa para borrar los que
 # ya no estén en la siguiente.
 install -Dm644 "$BUILD_DIR/layer.files" "$AIROOTFS/var/lib/aurora/update/files.txt"
