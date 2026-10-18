@@ -861,10 +861,19 @@ class UpdateView(TaskView):
 
     def on_finish(self, ok):
         changed = any(line.startswith(("Aurora actualizado a", "Se volvió de")) for line in self.task.lines)
-        if ok and changed:
+        if not (ok and changed):
+            return
+        if os.path.isdir("/run/archiso"):
+            # Desde el USB un reinicio borra la actualización: solo se reabre la interfaz.
             self.app.push(Message(self.app, "Aurora actualizado",
-                                  "La interfaz se va a reabrir para usar la versión nueva.",
+                                  "Estás usando Aurora desde el USB: la versión nueva dura hasta que apagues. "
+                                  "La interfaz se va a reabrir para usarla.",
                                   (("Reabrir ahora", self.app.restart_frontend),)))
+            return
+        self.app.push(Message(self.app, "Aurora actualizado",
+                              "Hay que reiniciar la consola para terminar de aplicar la versión nueva.",
+                              (("Reiniciar ahora", self.app.reboot), ("Más tarde", self.app.restart_frontend)),
+                              accent=self.accent))
 
 
 class HardwareView(View):
@@ -1281,6 +1290,12 @@ class App:
         os.makedirs(state, exist_ok=True)
         open(os.path.join(state, "restart-frontend"), "w").close()
         subprocess.Popen(["sh", "-c", "sleep 1; pkill -TERM -x es-de"], start_new_session=True)
+        self.running = False
+
+    def reboot(self):
+        """Reinicia la consola (logind lo permite a la sesión activa; si no, con sudo)."""
+        if subprocess.call(["systemctl", "reboot"]) != 0:
+            subprocess.call(["sudo", "-n", "systemctl", "reboot"])
         self.running = False
 
     def draw_chrome(self, base):

@@ -194,6 +194,7 @@ cmd_apply() {
   update_boot_entry "$old_params"
   after_update
   say "Aurora actualizado a $available."
+  [[ -d "$ROOT/run/archiso" ]] || say "Reiniciá la consola para terminar de aplicarla."
 }
 
 cmd_rollback() {
